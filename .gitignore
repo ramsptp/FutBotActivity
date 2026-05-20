@@ -1,3 +1,9 @@
 activity.md
 .claude/
 plan.md
+dev.db
+activity/frontend/.env
+activity/backend/.env
+activity/frontend/node_modules/
+__pycache__/
+*.pyc
