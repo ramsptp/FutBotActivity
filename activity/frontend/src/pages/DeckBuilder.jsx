@@ -1,19 +1,20 @@
 import { useEffect, useState } from 'react'
 import { apiFetch } from '../lib/api'
+import FutCard from '../components/FutCard'
 
 const DECK_SIZE = 5
 const POSITIONS = ['All', 'Forward', 'Midfielder', 'Defender']
-const RARITIES = ['All', 'Common', 'Uncommon', 'Rare']
+const RARITIES  = ['All', 'Common', 'Uncommon', 'Rare']
 
 export default function DeckBuilder({ token }) {
-  const [decks, setDecks] = useState([])
-  const [activeDeck, setActiveDeck] = useState(null) // {deck_name, cards[]}
-  const [deckName, setDeckName] = useState('')
+  const [decks, setDecks]         = useState([])
+  const [activeDeck, setActiveDeck] = useState(null)
+  const [deckName, setDeckName]   = useState('')
   const [inventory, setInventory] = useState([])
-  const [filters, setFilters] = useState({ position: 'All', rarity: 'All' })
-  const [view, setView] = useState('list') // 'list' | 'editor'
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState(null)
+  const [filters, setFilters]     = useState({ position: 'All', rarity: 'All' })
+  const [view, setView]           = useState('list')
+  const [saving, setSaving]       = useState(false)
+  const [error, setError]         = useState(null)
 
   useEffect(() => { fetchDecks() }, [])
   useEffect(() => { if (view === 'editor') fetchInventory() }, [view, filters])
@@ -26,186 +27,140 @@ export default function DeckBuilder({ token }) {
   async function fetchInventory() {
     const params = new URLSearchParams()
     if (filters.position !== 'All') params.set('position', filters.position)
-    if (filters.rarity !== 'All') params.set('rarity', filters.rarity)
+    if (filters.rarity   !== 'All') params.set('rarity',   filters.rarity)
     const data = await apiFetch(`/api/collection?${params}`, token)
     setInventory(data)
   }
 
-  function openNew() {
-    setActiveDeck({ deck_name: '', cards: [] })
-    setDeckName('')
-    setView('editor')
-  }
-
-  function openEdit(deck) {
-    setActiveDeck({ ...deck })
-    setDeckName(deck.deck_name)
-    setView('editor')
-  }
+  function openNew()    { setActiveDeck({ deck_name: '', cards: [] }); setDeckName(''); setView('editor') }
+  function openEdit(d)  { setActiveDeck({ ...d }); setDeckName(d.deck_name); setView('editor') }
 
   function addCard(card) {
     if (activeDeck.cards.length >= DECK_SIZE) return
     if (activeDeck.cards.find(c => c.card_id === card.card_id)) return
     setActiveDeck(d => ({ ...d, cards: [...d.cards, card] }))
   }
-
-  function removeCard(cardId) {
-    setActiveDeck(d => ({ ...d, cards: d.cards.filter(c => c.card_id !== cardId) }))
-  }
+  function removeCard(id) { setActiveDeck(d => ({ ...d, cards: d.cards.filter(c => c.card_id !== id) })) }
 
   async function saveDeck() {
     if (!deckName.trim()) return setError('Enter a deck name')
     if (activeDeck.cards.length !== DECK_SIZE) return setError(`Pick exactly ${DECK_SIZE} cards`)
-    setSaving(true)
-    setError(null)
+    setSaving(true); setError(null)
     try {
       const body = { deck_name: deckName.trim(), card_ids: activeDeck.cards.map(c => c.card_id) }
       const isEdit = decks.find(d => d.deck_name === activeDeck.deck_name)
-      if (isEdit) {
-        await apiFetch(`/api/decks/${activeDeck.deck_name}`, token, { method: 'PUT', body: JSON.stringify(body) })
-      } else {
-        await apiFetch('/api/decks', token, { method: 'POST', body: JSON.stringify(body) })
-      }
-      await fetchDecks()
-      setView('list')
-    } catch (e) {
-      setError(e.message)
-    }
+      if (isEdit) await apiFetch(`/api/decks/${activeDeck.deck_name}`, token, { method: 'PUT',  body: JSON.stringify(body) })
+      else        await apiFetch('/api/decks',                          token, { method: 'POST', body: JSON.stringify(body) })
+      await fetchDecks(); setView('list')
+    } catch (e) { setError(e.message) }
     setSaving(false)
   }
 
-  async function deleteDeck(deckName) {
-    await apiFetch(`/api/decks/${deckName}`, token, { method: 'DELETE' })
-    await fetchDecks()
-    setView('list')
+  async function deleteDeck(name) {
+    await apiFetch(`/api/decks/${name}`, token, { method: 'DELETE' })
+    await fetchDecks(); setView('list')
   }
 
+  /* ── LIST VIEW ── */
   if (view === 'list') return (
-    <div style={styles.root}>
-      <div style={styles.header}>
-        <h2 style={styles.heading}>My Decks</h2>
-        <button style={styles.newBtn} onClick={openNew}>+ New Deck</button>
+    <div className="page">
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+        <h2 style={{ color: '#fff', fontWeight: 700, fontSize: 20 }}>My Decks</h2>
+        <button onClick={openNew} style={{ background: 'var(--accent)', border: 'none', borderRadius: 8, color: '#fff', padding: '7px 14px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>+ New</button>
       </div>
-      {decks.length === 0
-        ? <p style={{ color: '#888' }}>No decks yet. Create one to start battling.</p>
-        : decks.map(deck => (
-          <div key={deck.deck_name} style={styles.deckRow} onClick={() => openEdit(deck)}>
-            <div>
-              <div style={styles.deckName}>{deck.deck_name}</div>
-              <div style={styles.deckMeta}>{deck.cards.length} cards · {deck.cards.map(c => c.name).join(', ').slice(0, 60)}…</div>
-            </div>
-            <div style={styles.deckArrow}>›</div>
+      {decks.length === 0 ? (
+        <p style={{ color: 'var(--muted)', textAlign: 'center', paddingTop: 40 }}>No decks yet. Create one to battle!</p>
+      ) : decks.map(deck => (
+        <div key={deck.deck_name} onClick={() => openEdit(deck)} style={{
+          background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12,
+          padding: '12px 16px', marginBottom: 10, cursor: 'pointer',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        }}>
+          <div>
+            <div style={{ fontWeight: 600, marginBottom: 4 }}>{deck.deck_name}</div>
+            <div style={{ fontSize: 12, color: 'var(--muted)' }}>{deck.cards.length} cards</div>
           </div>
-        ))
-      }
+          {/* Mini card strip */}
+          <div style={{ display: 'flex', gap: 3 }}>
+            {deck.cards.slice(0, 4).map((c, i) => (
+              <div key={i} style={{ width: 28, borderRadius: 4, overflow: 'hidden' }}>
+                <FutCard card={c} />
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
     </div>
   )
 
-  // Editor view
-  const inDeck = activeDeck?.cards || []
+  /* ── EDITOR VIEW ── */
+  const inDeck  = activeDeck?.cards || []
   const filtered = inventory.filter(c => !inDeck.find(d => d.card_id === c.card_id))
 
   return (
-    <div style={styles.root}>
-      <div style={styles.header}>
-        <button style={styles.backBtn} onClick={() => setView('list')}>‹ Back</button>
-        <input
-          style={styles.nameInput}
-          placeholder="Deck name"
-          value={deckName}
-          onChange={e => setDeckName(e.target.value)}
-        />
+    <div className="page">
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+        <button onClick={() => setView('list')} style={{ background: 'transparent', border: 'none', color: 'var(--accent)', fontSize: 20, cursor: 'pointer', padding: 0 }}>‹</button>
+        <input value={deckName} onChange={e => setDeckName(e.target.value)} placeholder="Deck name"
+          style={{ flex: 1, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, color: '#fff', padding: '8px 12px', fontSize: 14 }} />
       </div>
 
       {/* Deck slots */}
-      <div style={styles.slotsRow}>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 6, justifyContent: 'center' }}>
         {Array.from({ length: DECK_SIZE }).map((_, i) => {
           const card = inDeck[i]
           return (
-            <div key={i} style={{ ...styles.slot, ...(card ? styles.slotFilled : styles.slotEmpty) }}
-              onClick={() => card && removeCard(card.card_id)}>
+            <div key={i} onClick={() => card && removeCard(card.card_id)} style={{
+              width: 100, flexShrink: 0, borderRadius: 8, overflow: 'hidden',
+              cursor: card ? 'pointer' : 'default',
+              border: `2px dashed ${card ? 'var(--accent)' : 'rgba(255,255,255,0.1)'}`,
+              aspectRatio: '300 / 420',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              background: 'rgba(255,255,255,0.02)',
+            }}>
               {card
-                ? <>{card.image_url && <img src={card.image_url} style={styles.slotImg} loading="lazy" />}
-                    <div style={styles.slotName}>{card.name.split(' ').pop()}</div></>
-                : <div style={styles.slotPlus}>+</div>
+                ? <img src={card.image_url} alt={card.name} style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'top', display: 'block' }} />
+                : <span style={{ color: 'rgba(255,255,255,0.15)', fontSize: 22 }}>+</span>
               }
             </div>
           )
         })}
       </div>
-      <div style={styles.slotHint}>{inDeck.length}/{DECK_SIZE} — tap a slot to remove</div>
-
-      {error && <div style={styles.error}>{error}</div>}
-
-      <div style={styles.filterRow}>
-        {POSITIONS.map(p => (
-          <button key={p} style={{ ...styles.filterBtn, ...(filters.position === p ? styles.filterBtnActive : {}) }}
-            onClick={() => setFilters(f => ({ ...f, position: p }))}>{p}</button>
-        ))}
-      </div>
-      <div style={styles.filterRow}>
-        {RARITIES.map(r => (
-          <button key={r} style={{ ...styles.filterBtn, ...(filters.rarity === r ? styles.filterBtnActive : {}) }}
-            onClick={() => setFilters(f => ({ ...f, rarity: r }))}>{r}</button>
-        ))}
+      <div style={{ fontSize: 11, color: 'var(--muted)', textAlign: 'center', marginBottom: 12 }}>
+        {inDeck.length}/{DECK_SIZE} · tap slot to remove
       </div>
 
-      <div style={styles.invGrid}>
-        {filtered.map((card, i) => (
-          <div key={i} style={styles.invTile}
-            onClick={() => addCard(card)}>
-            {card.image_url
-              ? <img src={card.image_url} style={styles.invImg} loading="lazy" />
-              : <div style={styles.invImgPlaceholder}>{card.position?.[0]}</div>
-            }
-            <div style={styles.invName}>{card.name.split(' ').pop()}</div>
-            <div style={styles.invOvr}>{card.overall}</div>
-          </div>
-        ))}
+      {error && <div style={{ background: '#3d1515', color: '#f87171', borderRadius: 8, padding: '8px 12px', marginBottom: 10, fontSize: 13 }}>{error}</div>}
+
+      {/* Filters */}
+      {[{ key: 'position', opts: POSITIONS }, { key: 'rarity', opts: RARITIES }].map(({ key, opts }) => (
+        <div key={key} style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
+          {opts.map(o => (
+            <button key={o} onClick={() => setFilters(f => ({ ...f, [key]: o }))} style={{
+              padding: '3px 10px', borderRadius: 20, fontSize: 11, cursor: 'pointer',
+              border: `1px solid ${filters[key] === o ? 'var(--accent)' : 'rgba(255,255,255,0.1)'}`,
+              background: filters[key] === o ? 'var(--accent)' : 'transparent',
+              color: filters[key] === o ? '#fff' : 'var(--muted)',
+            }}>{o}</button>
+          ))}
+        </div>
+      ))}
+
+      {/* Inventory grid */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))', gap: 8, marginBottom: 70 }}>
+        {filtered.map((card, i) => <FutCard key={i} card={card} onClick={() => addCard(card)} />)}
       </div>
 
-      <div style={styles.saveRow}>
+      {/* Save bar */}
+      <div style={{ position: 'fixed', bottom: 56, left: '50%', transform: 'translateX(-50%)', width: '100%', maxWidth: 480, display: 'flex', gap: 8, padding: '10px 16px', background: 'var(--bg)', borderTop: '1px solid var(--border)' }}>
         {activeDeck.deck_name && (
-          <button style={styles.deleteBtn} onClick={() => deleteDeck(activeDeck.deck_name)}>Delete</button>
+          <button onClick={() => deleteDeck(activeDeck.deck_name)} style={{ background: '#7f1d1d', border: 'none', borderRadius: 8, color: '#fff', padding: '10px 14px', cursor: 'pointer', fontSize: 13 }}>Delete</button>
         )}
-        <button style={styles.saveBtn} onClick={saveDeck} disabled={saving}>
+        <button className="btn-primary" onClick={saveDeck} disabled={saving} style={{ flex: 1 }}>
           {saving ? 'Saving…' : 'Save Deck'}
         </button>
       </div>
     </div>
   )
-}
-
-const styles = {
-  root: { padding: '16px 16px 100px', color: '#fff', fontFamily: 'sans-serif', minHeight: '100vh', background: '#1a1a2e' },
-  header: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 },
-  heading: { margin: 0, fontSize: 20 },
-  newBtn: { background: '#5865f2', border: 'none', borderRadius: 8, color: '#fff', padding: '8px 14px', cursor: 'pointer', fontSize: 13 },
-  backBtn: { background: 'transparent', border: 'none', color: '#5865f2', fontSize: 18, cursor: 'pointer', padding: '0 8px 0 0' },
-  nameInput: { flex: 1, background: '#16213e', border: '1px solid #2a2a4a', borderRadius: 8, color: '#fff', padding: '8px 12px', fontSize: 14 },
-  deckRow: { background: '#16213e', borderRadius: 10, padding: '14px 16px', marginBottom: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between' },
-  deckName: { fontWeight: 600, marginBottom: 4 },
-  deckMeta: { fontSize: 12, color: '#888' },
-  deckArrow: { color: '#555', fontSize: 20 },
-  slotsRow: { display: 'flex', gap: 6, marginBottom: 6 },
-  slot: { flex: 1, borderRadius: 8, overflow: 'hidden', cursor: 'pointer', textAlign: 'center', minHeight: 72 },
-  slotFilled: { background: '#16213e', border: '1px solid #5865f2' },
-  slotEmpty: { background: '#16213e', border: '1px dashed #333', display: 'flex', alignItems: 'center', justifyContent: 'center' },
-  slotImg: { width: '100%', aspectRatio: '1', objectFit: 'cover', display: 'block' },
-  slotName: { fontSize: 9, padding: '2px 2px', color: '#ccc', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
-  slotPlus: { color: '#333', fontSize: 20 },
-  slotHint: { fontSize: 11, color: '#555', marginBottom: 12, textAlign: 'center' },
-  error: { background: '#3d1515', color: '#f88', borderRadius: 8, padding: '8px 12px', marginBottom: 12, fontSize: 13 },
-  filterRow: { display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 },
-  filterBtn: { padding: '3px 10px', borderRadius: 12, border: '1px solid #333', background: 'transparent', color: '#888', cursor: 'pointer', fontSize: 11 },
-  filterBtnActive: { background: '#5865f2', borderColor: '#5865f2', color: '#fff' },
-  invGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(72px, 1fr))', gap: 6, marginBottom: 16 },
-  invTile: { background: '#16213e', borderRadius: 6, overflow: 'hidden', cursor: 'pointer', textAlign: 'center' },
-  invImg: { width: '100%', aspectRatio: '1', objectFit: 'cover', display: 'block' },
-  invImgPlaceholder: { width: '100%', aspectRatio: '1', background: '#2a2a4a', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#555' },
-  invName: { fontSize: 9, padding: '2px 3px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
-  invOvr: { fontSize: 11, fontWeight: 700, color: '#ffd700', paddingBottom: 3 },
-  saveRow: { position: 'fixed', bottom: 56, left: 0, right: 0, display: 'flex', gap: 10, padding: '10px 16px', background: '#0d0d1a', borderTop: '1px solid #2a2a4a' },
-  saveBtn: { flex: 1, background: '#5865f2', border: 'none', borderRadius: 8, color: '#fff', padding: '10px', cursor: 'pointer', fontSize: 14, fontWeight: 600 },
-  deleteBtn: { background: '#c0392b', border: 'none', borderRadius: 8, color: '#fff', padding: '10px 16px', cursor: 'pointer', fontSize: 14 },
 }

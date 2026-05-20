@@ -1,36 +1,34 @@
 const TABS = [
-  { id: 'home', label: '🏠 Home' },
-  { id: 'collection', label: '📦 Cards' },
-  { id: 'packs', label: '🎁 Packs' },
-  { id: 'decks', label: '🃏 Decks' },
-  { id: 'battle', label: '⚔️ Battle' },
+  { id: 'home',       label: '🏠',  text: 'Home' },
+  { id: 'collection', label: '📦',  text: 'Cards' },
+  { id: 'packs',      label: '🎁',  text: 'Packs' },
+  { id: 'decks',      label: '🃏',  text: 'Decks' },
+  { id: 'battle',     label: '⚔️', text: 'Battle' },
 ]
 
 export default function Nav({ page, setPage }) {
   return (
-    <nav style={styles.nav}>
-      {TABS.map(t => (
-        <button
-          key={t.id}
-          style={{ ...styles.tab, ...(page === t.id ? styles.tabActive : {}) }}
-          onClick={() => setPage(t.id)}
-        >
-          {t.label}
-        </button>
-      ))}
+    <nav style={{
+      position: 'fixed', bottom: 0, left: 0, right: 0,
+      display: 'flex', background: 'rgba(10,14,26,0.95)',
+      backdropFilter: 'blur(12px)',
+      borderTop: '1px solid rgba(255,255,255,0.07)', zIndex: 50,
+    }}>
+      {TABS.map(t => {
+        const active = page === t.id
+        return (
+          <button key={t.id} onClick={() => setPage(t.id)} style={{
+            flex: 1, padding: '8px 0 6px', background: 'transparent',
+            border: 'none', borderTop: `2px solid ${active ? 'var(--accent)' : 'transparent'}`,
+            color: active ? 'var(--accent)' : '#475569', cursor: 'pointer',
+            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,
+            transition: 'color 0.15s',
+          }}>
+            <span style={{ fontSize: 16 }}>{t.label}</span>
+            <span style={{ fontSize: 10, fontWeight: active ? 600 : 400 }}>{t.text}</span>
+          </button>
+        )
+      })}
     </nav>
   )
-}
-
-const styles = {
-  nav: {
-    position: 'fixed', bottom: 0, left: 0, right: 0,
-    display: 'flex', background: '#0d0d1a',
-    borderTop: '1px solid #2a2a4a', zIndex: 50,
-  },
-  tab: {
-    flex: 1, padding: '10px 0', background: 'transparent',
-    border: 'none', color: '#666', cursor: 'pointer', fontSize: 12,
-  },
-  tabActive: { color: '#5865f2', borderTop: '2px solid #5865f2' },
 }

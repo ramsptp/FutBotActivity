@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { apiFetch } from '../lib/api'
+import FutCard from '../components/FutCard'
 
 const PACK_META = {
   rare_player_pack: { label: 'Rare Player Pack', icon: '🌟', desc: '1 Rare or Special card (85+ OVR)' },
@@ -8,16 +9,15 @@ const PACK_META = {
   tester_pack:      { label: 'Tester Pack',        icon: '💎', desc: '1 Icon + 4 high-rated cards' },
 }
 
-const RARITY_COLOR = { Common: '#aaa', Uncommon: '#4caf50', Rare: '#ffd700' }
-
 export default function Packs({ token }) {
-  const [packs, setPacks] = useState(null)
-  const [screen, setScreen] = useState('list') // list | opening | result
+  const [packs, setPacks]         = useState(null)
+  const [screen, setScreen]       = useState('list')
   const [openingPack, setOpeningPack] = useState(null)
   const [revealedCards, setRevealedCards] = useState([])
-  const [revealIndex, setRevealIndex] = useState(0)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState(null)
+  const [revealIndex, setRevealIndex]     = useState(0)
+  const [flipped, setFlipped]     = useState(false)
+  const [loading, setLoading]     = useState(false)
+  const [error, setError]         = useState(null)
 
   useEffect(() => { fetchPacks() }, [])
 
@@ -27,145 +27,131 @@ export default function Packs({ token }) {
   }
 
   async function openPack(packType) {
-    setLoading(true)
-    setError(null)
+    setLoading(true); setError(null)
     try {
       const cards = await apiFetch(`/api/packs/open/${packType}`, token, { method: 'POST' })
-      setRevealedCards(cards)
-      setRevealIndex(0)
-      setOpeningPack(packType)
-      setScreen('opening')
+      setRevealedCards(cards); setRevealIndex(0); setFlipped(false)
+      setOpeningPack(packType); setScreen('opening')
       await fetchPacks()
-    } catch (e) {
-      setError(e.message)
-    }
+      // Brief delay then flip
+      setTimeout(() => setFlipped(true), 400)
+    } catch (e) { setError(e.message) }
     setLoading(false)
   }
 
-  function revealNext() {
+  function nextCard() {
     if (revealIndex < revealedCards.length - 1) {
-      setRevealIndex(i => i + 1)
+      setFlipped(false)
+      setTimeout(() => { setRevealIndex(i => i + 1); setFlipped(true) }, 350)
     } else {
       setScreen('result')
     }
   }
 
+  /* ── CARD FLIP REVEAL ── */
   if (screen === 'opening') {
     const card = revealedCards[revealIndex]
     return (
-      <div style={s.root}>
-        <div style={s.openingHeader}>
-          {PACK_META[openingPack]?.icon} {PACK_META[openingPack]?.label}
-          <span style={s.revealCount}>{revealIndex + 1} / {revealedCards.length}</span>
+      <div className="page" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minHeight: '90svh', justifyContent: 'center', gap: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', marginBottom: 8 }}>
+          <span style={{ fontSize: 16, fontWeight: 600 }}>{PACK_META[openingPack]?.icon} {PACK_META[openingPack]?.label}</span>
+          <span style={{ color: 'var(--muted)', fontSize: 14 }}>{revealIndex + 1} / {revealedCards.length}</span>
         </div>
-        <div style={s.cardReveal} key={revealIndex}>
-          {card.image_url
-            ? <img src={card.image_url} style={s.revealImg} />
-            : <div style={s.revealImgPlaceholder}>{card.position?.[0]}</div>
-          }
-          <div style={s.revealName}>{card.name}</div>
-          <div style={{ ...s.revealRarity, color: RARITY_COLOR[card.card_rarity] || '#fff' }}>
-            {card.card_rarity} · {card.card_type}
+
+        {/* Flip container */}
+        <div style={{ width: '70%', maxWidth: 220, perspective: 800 }}>
+          <div style={{
+            width: '100%',
+            transformStyle: 'preserve-3d',
+            transition: 'transform 0.55s cubic-bezier(0.4,0,0.2,1)',
+            transform: flipped ? 'rotateY(0deg)' : 'rotateY(180deg)',
+            position: 'relative',
+          }}>
+            {/* Front — card */}
+            <div style={{ backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden' }}>
+              <FutCard card={card} />
+            </div>
+            {/* Back — card back design */}
+            <div style={{
+              position: 'absolute', inset: 0,
+              backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden',
+              transform: 'rotateY(180deg)',
+              background: 'linear-gradient(135deg, #1e3a5f, #0f1f3d)',
+              borderRadius: 10,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>
+              <div style={{ fontSize: 36 }}>⚽</div>
+            </div>
           </div>
-          <div style={s.revealStats}>
-            <span style={s.revealOvr}>{card.overall} OVR</span>
-            <span style={s.revealStat}>⚔️ {card.attack}</span>
-            <span style={s.revealStat}>🛡️ {card.defense}</span>
-            <span style={s.revealStat}>💨 {card.speed}</span>
-          </div>
-          <div style={s.revealMeta}>{card.club} · {card.nation}</div>
         </div>
-        <button style={s.nextBtn} onClick={revealNext}>
-          {revealIndex < revealedCards.length - 1 ? 'Next Card →' : 'See All Cards'}
-        </button>
+
+        {/* Card info — only shown after flip */}
+        {flipped && (
+          <div className="anim-fadeUp" style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: 18, fontWeight: 700 }}>{card.name}</div>
+            <div style={{ fontSize: 13, color: 'var(--muted)', margin: '4px 0 10px' }}>{card.card_rarity} · {card.card_type}</div>
+            <div style={{ display: 'flex', justifyContent: 'center', gap: 16 }}>
+              {[['OVR','overall','#f0c040'],['ATK','attack','#ef4444'],['DEF','defense','#3b82f6'],['SPD','speed','#22c55e']].map(([l,k,c]) => (
+                <div key={l} style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: 20, fontWeight: 800, color: c }}>{card[k]}</div>
+                  <div style={{ fontSize: 10, color: 'var(--muted)' }}>{l}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {flipped && (
+          <button className="btn-primary anim-fadeUp" onClick={nextCard} style={{ maxWidth: 280 }}>
+            {revealIndex < revealedCards.length - 1 ? 'Next Card →' : 'See All'}
+          </button>
+        )}
       </div>
     )
   }
 
+  /* ── RESULT ── */
   if (screen === 'result') return (
-    <div style={s.root}>
-      <h2 style={s.heading}>Cards Received</h2>
-      <div style={s.resultGrid}>
+    <div className="page">
+      <h2 style={{ color: '#fff', fontWeight: 700, marginBottom: 14 }}>Cards Received</h2>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 16 }}>
         {revealedCards.map((card, i) => (
-          <div key={i} style={s.resultTile}>
-            {card.image_url
-              ? <img src={card.image_url} style={s.resultImg} loading="lazy" />
-              : <div style={s.revealImgPlaceholder}>{card.position?.[0]}</div>
-            }
-            <div style={s.resultName}>{card.name}</div>
-            <div style={{ ...s.resultRarity, color: RARITY_COLOR[card.card_rarity] || '#fff' }}>{card.card_rarity}</div>
-            <div style={s.resultOvr}>{card.overall}</div>
+          <div key={i} className="anim-fadeUp" style={{ animationDelay: `${i * 0.07}s` }}>
+            <FutCard card={card} />
           </div>
         ))}
       </div>
-      <button style={s.primaryBtn} onClick={() => setScreen('list')}>Back to Packs</button>
+      <button className="btn-primary" onClick={() => setScreen('list')}>Back to Packs</button>
     </div>
   )
 
+  /* ── PACK LIST ── */
   return (
-    <div style={s.root}>
-      <h2 style={s.heading}>📦 Packs</h2>
-      {error && <div style={s.error}>{error}</div>}
+    <div className="page">
+      <h2 style={{ color: '#fff', fontWeight: 700, fontSize: 20, marginBottom: 16 }}>📦 Packs</h2>
+      {error && <div style={{ background: '#3d1515', color: '#f87171', borderRadius: 8, padding: '8px 12px', marginBottom: 12, fontSize: 13 }}>{error}</div>}
       {!packs ? (
-        <p style={{ color: '#888' }}>Loading…</p>
-      ) : (
-        Object.entries(PACK_META).map(([key, meta]) => {
-          const count = packs[key] ?? 0
-          return (
-            <div key={key} style={s.packRow}>
-              <div style={s.packIcon}>{meta.icon}</div>
-              <div style={s.packInfo}>
-                <div style={s.packLabel}>{meta.label}</div>
-                <div style={s.packDesc}>{meta.desc}</div>
-              </div>
-              <div style={s.packRight}>
-                <div style={s.packCount}>×{count}</div>
-                <button
-                  style={{ ...s.openBtn, ...(count === 0 ? s.openBtnDisabled : {}) }}
-                  disabled={count === 0 || loading}
-                  onClick={() => openPack(key)}
-                >
-                  Open
-                </button>
-              </div>
+        <p style={{ color: 'var(--muted)', textAlign: 'center', paddingTop: 40 }}>Loading…</p>
+      ) : Object.entries(PACK_META).map(([key, meta]) => {
+        const count = packs[key] ?? 0
+        return (
+          <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 12, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 14, padding: '14px 16px', marginBottom: 10 }}>
+            <div style={{ fontSize: 32 }}>{meta.icon}</div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 2 }}>{meta.label}</div>
+              <div style={{ fontSize: 12, color: 'var(--muted)' }}>{meta.desc}</div>
             </div>
-          )
-        })
-      )}
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+              <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--gold)' }}>×{count}</div>
+              <button
+                disabled={count === 0 || loading}
+                onClick={() => openPack(key)}
+                style={{ background: count > 0 ? 'var(--accent)' : '#333', border: 'none', borderRadius: 8, color: count > 0 ? '#fff' : '#666', padding: '6px 14px', cursor: count > 0 ? 'pointer' : 'not-allowed', fontSize: 13, fontWeight: 600 }}
+              >Open</button>
+            </div>
+          </div>
+        )
+      })}
     </div>
   )
-}
-
-const s = {
-  root: { padding: '16px 16px 80px', color: '#fff', fontFamily: 'sans-serif', minHeight: '100vh', background: '#1a1a2e' },
-  heading: { margin: '0 0 16px', fontSize: 22 },
-  error: { background: '#3d1515', color: '#f88', borderRadius: 8, padding: '8px 12px', marginBottom: 12, fontSize: 13 },
-  packRow: { display: 'flex', alignItems: 'center', gap: 12, background: '#16213e', borderRadius: 12, padding: '14px 16px', marginBottom: 10 },
-  packIcon: { fontSize: 32 },
-  packInfo: { flex: 1 },
-  packLabel: { fontWeight: 600, fontSize: 15 },
-  packDesc: { fontSize: 12, color: '#888', marginTop: 2 },
-  packRight: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 },
-  packCount: { fontSize: 16, fontWeight: 700, color: '#ffd700' },
-  openBtn: { background: '#5865f2', border: 'none', borderRadius: 8, color: '#fff', padding: '6px 14px', cursor: 'pointer', fontSize: 13, fontWeight: 600 },
-  openBtnDisabled: { background: '#333', color: '#666', cursor: 'not-allowed' },
-  openingHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 16, fontWeight: 600, marginBottom: 16 },
-  revealCount: { color: '#888', fontSize: 13 },
-  cardReveal: { background: '#16213e', borderRadius: 16, overflow: 'hidden', marginBottom: 20, textAlign: 'center', animation: 'fadeIn 0.4s ease' },
-  revealImg: { width: '100%', maxHeight: 300, objectFit: 'cover', display: 'block' },
-  revealImgPlaceholder: { height: 200, background: '#2a2a4a', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 64, color: '#555' },
-  revealName: { fontSize: 20, fontWeight: 700, padding: '12px 16px 4px' },
-  revealRarity: { fontSize: 13, paddingBottom: 8 },
-  revealStats: { display: 'flex', justifyContent: 'center', gap: 12, padding: '8px 16px', background: '#0d0d1a' },
-  revealOvr: { fontWeight: 700, color: '#ffd700' },
-  revealStat: { fontSize: 14 },
-  revealMeta: { fontSize: 12, color: '#888', padding: '6px 0 12px' },
-  nextBtn: { width: '100%', background: '#5865f2', border: 'none', borderRadius: 10, color: '#fff', padding: 14, fontSize: 16, fontWeight: 600, cursor: 'pointer' },
-  resultGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(90px, 1fr))', gap: 8, marginBottom: 16 },
-  resultTile: { background: '#16213e', borderRadius: 8, overflow: 'hidden', textAlign: 'center' },
-  resultImg: { width: '100%', aspectRatio: '1', objectFit: 'cover', display: 'block' },
-  resultName: { fontSize: 10, padding: '4px 4px 0', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
-  resultRarity: { fontSize: 10 },
-  resultOvr: { fontSize: 12, fontWeight: 700, color: '#ffd700', paddingBottom: 4 },
-  primaryBtn: { width: '100%', background: '#5865f2', border: 'none', borderRadius: 10, color: '#fff', padding: 12, fontSize: 15, fontWeight: 600, cursor: 'pointer' },
 }
