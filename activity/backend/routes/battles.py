@@ -35,9 +35,12 @@ class ChallengeBody(BaseModel):
 @router.post("/api/lobby/register")
 async def register_lobby(body: LobbyRegister, discord_user=Depends(get_current_user)):
     user_id = discord_user["id"]
-    name = discord_user["username"]
     channel = lobby.setdefault(body.channel_id, {})
-    channel[user_id] = {"name": name, "expires_at": time.time() + 35}
+    channel[user_id] = {
+        "name": discord_user["username"],
+        "avatar": discord_user.get("avatar"),
+        "expires_at": time.time() + 35,
+    }
     return {"ok": True}
 
 @router.get("/api/lobby/participants")
@@ -46,7 +49,7 @@ async def get_participants(channel_id: str, discord_user=Depends(get_current_use
     now = time.time()
     channel = lobby.get(channel_id, {})
     return [
-        {"user_id": uid, "name": info["name"]}
+        {"user_id": uid, "name": info["name"], "avatar": info.get("avatar")}
         for uid, info in channel.items()
         if uid != user_id and info["expires_at"] > now
     ]

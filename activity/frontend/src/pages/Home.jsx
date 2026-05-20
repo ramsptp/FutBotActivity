@@ -170,7 +170,9 @@ export default function Home({ token, user, setPage, participants = [] }) {
               {participants.slice(0, 3).map((p, i) => (
                 <img
                   key={p.user_id}
-                  src={`https://cdn.discordapp.com/avatars/${p.user_id}/0.png?size=32`}
+                  src={p.avatar
+                    ? `https://cdn.discordapp.com/avatars/${p.user_id}/${p.avatar}.png?size=32`
+                    : `https://cdn.discordapp.com/embed/avatars/${Number(p.user_id) % 5}.png`}
                   style={{ width: 24, height: 24, borderRadius: '50%', border: '2px solid #0f172a', objectFit: 'cover', marginRight: -6, zIndex: 1 - i }}
                   onError={e => { e.target.src = 'https://cdn.discordapp.com/embed/avatars/1.png' }}
                 />
