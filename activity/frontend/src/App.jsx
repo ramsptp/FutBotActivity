@@ -7,6 +7,7 @@ import Collection from './pages/Collection'
 import DeckBuilder from './pages/DeckBuilder'
 import Battle from './pages/Battle'
 import Packs from './pages/Packs'
+import Shop from './pages/Shop'
 
 function App() {
   const [auth, setAuth] = useState(null)
@@ -83,6 +84,7 @@ function App() {
       {page === 'collection' && <Collection token={token} />}
       {page === 'decks' && <DeckBuilder token={token} />}
       {page === 'packs' && <Packs token={token} />}
+      {page === 'shop' && <Shop token={token} />}
       {page === 'battle' && (
         <Battle
           token={token}

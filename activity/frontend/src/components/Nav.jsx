@@ -1,6 +1,7 @@
 const TABS = [
   { id: 'home',       label: '🏠',  text: 'Home' },
   { id: 'collection', label: '📦',  text: 'Cards' },
+  { id: 'shop',       label: '🛒',  text: 'Shop' },
   { id: 'packs',      label: '🎁',  text: 'Packs' },
   { id: 'decks',      label: '🃏',  text: 'Decks' },
   { id: 'battle',     label: '⚔️', text: 'Battle' },

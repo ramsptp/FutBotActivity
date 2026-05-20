@@ -248,20 +248,29 @@ async def end_game(room):
 
     if s1 == s2:
         update_battle_stats(db, p1_id, p2_id, is_draw=True)
+        db.execute("UPDATE players SET coins = coins + 150 WHERE user_id = ?", (int(p1_id),))
+        db.execute("UPDATE players SET coins = coins + 150 WHERE user_id = ?", (int(p2_id),))
     elif s1 > s2:
         update_battle_stats(db, p1_id, p2_id, is_draw=False)
+        db.execute("UPDATE players SET coins = coins + 200 WHERE user_id = ?", (int(p1_id),))
+        db.execute("UPDATE players SET coins = coins + 100 WHERE user_id = ?", (int(p2_id),))
     else:
         update_battle_stats(db, p2_id, p1_id, is_draw=False)
+        db.execute("UPDATE players SET coins = coins + 200 WHERE user_id = ?", (int(p2_id),))
+        db.execute("UPDATE players SET coins = coins + 100 WHERE user_id = ?", (int(p1_id),))
+    db.commit()
 
     for pid in player_ids:
         opp_id = next(x for x in player_ids if x != pid)
         my_score = room["score"][pid]
         opp_score = room["score"][opp_id]
         winner = "draw" if my_score == opp_score else ("you" if my_score > opp_score else "opponent")
+        coins_earned = 150 if my_score == opp_score else (200 if winner == "you" else 100)
         await send_to(room["players"][pid], {
             "type": "game_over",
             "winner": winner,
             "final_score": {"you": my_score, "opponent": opp_score},
+            "coins_earned": coins_earned,
         })
 
 

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { apiFetch } from '../lib/api'
+import { apiFetch, preloadImages } from '../lib/api'
 import FutCard from '../components/FutCard'
 
 const PACK_META = {
@@ -30,11 +30,13 @@ export default function Packs({ token }) {
     setLoading(true); setError(null)
     try {
       const cards = await apiFetch(`/api/packs/open/${packType}`, token, { method: 'POST' })
+      // Preload ALL card images before showing anything
+      await preloadImages(cards.map(c => c.image_url))
       setRevealedCards(cards); setRevealIndex(0); setFlipped(false)
       setOpeningPack(packType); setScreen('opening')
-      await fetchPacks()
-      // Brief delay then flip
-      setTimeout(() => setFlipped(true), 400)
+      fetchPacks()
+      // Now image is already loaded — flip immediately
+      setTimeout(() => setFlipped(true), 300)
     } catch (e) { setError(e.message) }
     setLoading(false)
   }
@@ -42,7 +44,8 @@ export default function Packs({ token }) {
   function nextCard() {
     if (revealIndex < revealedCards.length - 1) {
       setFlipped(false)
-      setTimeout(() => { setRevealIndex(i => i + 1); setFlipped(true) }, 350)
+      // Image already preloaded — just animate
+      setTimeout(() => { setRevealIndex(i => i + 1); setFlipped(true) }, 300)
     } else {
       setScreen('result')
     }
@@ -114,9 +117,9 @@ export default function Packs({ token }) {
   if (screen === 'result') return (
     <div className="page">
       <h2 style={{ color: '#fff', fontWeight: 700, marginBottom: 14 }}>Cards Received</h2>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 16 }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginBottom: 16 }}>
         {revealedCards.map((card, i) => (
-          <div key={i} className="anim-fadeUp" style={{ animationDelay: `${i * 0.07}s` }}>
+          <div key={i} className="anim-fadeUp" style={{ width: 125, flexShrink: 0, animationDelay: `${i * 0.07}s` }}>
             <FutCard card={card} />
           </div>
         ))}

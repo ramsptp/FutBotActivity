@@ -29,7 +29,6 @@ export default function FutCard({ card, onClick, selected, dimmed, highlight, st
         <img
           src={card.image_url}
           alt={card.name}
-          loading="lazy"
           style={{ width: '100%', height: 'auto', display: 'block' }}
         />
       ) : (

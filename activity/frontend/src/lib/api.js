@@ -10,3 +10,17 @@ export async function apiFetch(path, token, options = {}) {
   if (!res.ok) throw new Error(`API error ${res.status}`)
   return res.json()
 }
+
+export function preloadImage(url) {
+  if (!url) return Promise.resolve()
+  return new Promise(resolve => {
+    const img = new Image()
+    img.onload = resolve
+    img.onerror = resolve  // resolve anyway so we never block
+    img.src = url
+  })
+}
+
+export function preloadImages(urls) {
+  return Promise.all(urls.filter(Boolean).map(preloadImage))
+}

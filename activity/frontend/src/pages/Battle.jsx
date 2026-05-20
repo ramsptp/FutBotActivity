@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { apiFetch } from '../lib/api'
+import { apiFetch, preloadImages } from '../lib/api'
 import FutCard from '../components/FutCard'
 
 const STAT_LABEL = { attack: 'Attack', defense: 'Defense', speed: 'Speed' }
@@ -53,6 +53,7 @@ export default function Battle({ token, participants = [], incomingChallenge, se
           setRoomId(msg.room_id); setScreen('waiting'); break
 
         case 'round_start':
+          preloadImages(msg.your_hand.map(c => c.image_url))
           setPicksStatThisRound(msg.picks_stat)
           setRound(msg.round)
           setHand(msg.your_hand)
@@ -79,6 +80,7 @@ export default function Battle({ token, participants = [], incomingChallenge, se
           setOpponentPicked(true); break
 
         case 'round_result':
+          preloadImages([msg.your_card?.image_url, msg.opponent_card?.image_url])
           setRoundResult(msg); setScore(msg.score); setScreen('round_result'); break
 
         case 'game_over':

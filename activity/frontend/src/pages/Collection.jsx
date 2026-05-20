@@ -50,7 +50,9 @@ export default function Collection({ token }) {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: 10 }}>
           {cards.map((card, i) => (
             <div key={i} className="anim-fadeUp" style={{ animationDelay: `${Math.min(i * 0.03, 0.5)}s` }}>
-              <FutCard card={card} onClick={() => setSelected(card)} />
+              <div style={{ contain: 'content' }}>
+                <FutCard card={card} onClick={() => setSelected(card)} />
+              </div>
             </div>
           ))}
         </div>
