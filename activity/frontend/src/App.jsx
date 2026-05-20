@@ -93,7 +93,7 @@ function App() {
           setIncomingChallenge={setIncomingChallenge}
         />
       )}
-      <Nav page={page} setPage={setPage} />
+      {page !== 'home' && <Nav page={page} setPage={setPage} />}
     </>
   )
 }
