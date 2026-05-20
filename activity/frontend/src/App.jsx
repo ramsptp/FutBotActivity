@@ -4,6 +4,7 @@ import Nav from './components/Nav'
 import Home from './pages/Home'
 import Collection from './pages/Collection'
 import DeckBuilder from './pages/DeckBuilder'
+import Battle from './pages/Battle'
 
 const discordSdk = new DiscordSDK(import.meta.env.VITE_CLIENT_ID)
 
@@ -56,7 +57,7 @@ function App() {
       {page === 'home' && <Home token={token} user={user} setPage={setPage} />}
       {page === 'collection' && <Collection token={token} />}
       {page === 'decks' && <DeckBuilder token={token} />}
-      {page === 'battle' && <div style={{ padding: 24, color: '#fff' }}>Battle coming soon…</div>}
+      {page === 'battle' && <Battle token={token} />}
       <Nav page={page} setPage={setPage} />
     </>
   )
