@@ -3,11 +3,21 @@ import { apiFetch } from '../lib/api'
 import StarterPackModal from '../components/StarterPackModal'
 
 const NAV = [
-  { id: 'home',       icon: '🏠', label: 'HOME' },
-  { id: 'collection', icon: '📖', label: 'COLLECTION' },
-  { id: 'shop',       icon: '🛒', label: 'SHOP' },
-  { id: 'packs',      icon: '🎁', label: 'PACKS' },
-  { id: 'battle',     icon: '⚔️', label: 'BATTLE' },
+  { id: 'home',       icon: 'home',         label: 'Home' },
+  { id: 'collection', icon: 'style',         label: 'Collection' },
+  { id: 'shop',       icon: 'shopping_cart', label: 'Shop' },
+  { id: 'packs',      icon: 'inventory_2',   label: 'Packs' },
+  { id: 'decks',      icon: 'layers',        label: 'Decks' },
+  { id: 'battle',     icon: 'swords',        label: 'Battle' },
+]
+
+const EMBERS = [
+  { left: '10%', size: 8,  delay: '0s',  dur: '7s' },
+  { left: '25%', size: 12, delay: '2s',  dur: '9s' },
+  { left: '45%', size: 5,  delay: '4s',  dur: '6s' },
+  { left: '65%', size: 8,  delay: '1s',  dur: '8s' },
+  { left: '80%', size: 12, delay: '3s',  dur: '10s' },
+  { left: '92%', size: 5,  delay: '5s',  dur: '7s' },
 ]
 
 export default function Home({ token, user, setPage }) {
@@ -28,87 +38,113 @@ export default function Home({ token, user, setPage }) {
     apiFetch('/api/packs', token).then(setPacks).catch(() => {})
   }, [])
 
-  const totalPacks = packs
-    ? Object.values(packs).reduce((a, b) => a + b, 0)
-    : 0
+  const totalPacks = packs ? Object.values(packs).reduce((a, b) => a + b, 0) : 0
 
   return (
     <div style={s.root}>
       {starterCards && <StarterPackModal cards={starterCards} onClose={() => setStarterCards(null)} />}
 
+      {/* Ember particles */}
+      <div style={s.embers}>
+        {EMBERS.map((e, i) => (
+          <div key={i} style={{
+            position: 'absolute', left: e.left,
+            width: e.size, height: e.size,
+            background: '#ffca45', borderRadius: '50%',
+            filter: 'blur(1px)', opacity: 0,
+            animation: `floatEmber ${e.dur} ${e.delay} infinite linear`,
+          }} />
+        ))}
+      </div>
+
       {/* ── TOP BAR ── */}
       <header style={s.topbar}>
         {/* Logo */}
-        <div style={s.logo}>
-          <div style={s.logoIcon}>⚽</div>
+        <div style={s.logoArea}>
+          <div style={s.logoHex}>
+            <span className="material-symbols-outlined" style={{ fontSize: 26, color: '#fff', fontVariationSettings: "'FILL' 1" }}>sports_soccer</span>
+          </div>
           <div>
-            <div style={s.logoText}>
-              <span style={{ color: '#fff' }}>FUT</span>
-              <span style={{ color: '#a855f7' }}>BOT</span>
-            </div>
+            <div style={s.logoText}>FUTBOT</div>
             <div style={s.logoSub}>FOOTBALL CARD BATTLES</div>
           </div>
         </div>
 
-        {/* Coins */}
-        <div style={s.currencies}>
-          <div style={s.coinChip}>
-            <span>🪙</span>
-            <span style={{ fontWeight: 700 }}>{player?.coins?.toLocaleString() ?? '—'}</span>
-            <span style={s.plus}>+</span>
+        {/* Currency + Profile */}
+        <div style={s.topRight}>
+          {/* Currency pill */}
+          <div style={s.currencyPill}>
+            <div style={s.coinBlock}>
+              <div style={s.coinIcon}>$</div>
+              <span style={s.currencyVal}>{player?.coins?.toLocaleString() ?? '—'}</span>
+              <button style={s.addBtn}><span className="material-symbols-outlined" style={{ fontSize: 14 }}>add</span></button>
+            </div>
+            <div style={s.currencyDivider} />
+            <div style={s.gemBlock}>
+              <span className="material-symbols-outlined" style={{ fontSize: 20, color: '#a855f7', fontVariationSettings: "'FILL' 1", filter: 'drop-shadow(0 0 6px rgba(168,85,247,0.8))' }}>diamond</span>
+              <span style={s.currencyVal}>245</span>
+              <button style={s.addBtn}><span className="material-symbols-outlined" style={{ fontSize: 14 }}>add</span></button>
+            </div>
           </div>
-        </div>
 
-        {/* Profile */}
-        <div style={s.profileBlock}>
-          <img
-            src={`https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png?size=64`}
-            alt={user.username}
-            style={s.avatar}
-            onError={e => { e.target.src = `https://cdn.discordapp.com/embed/avatars/0.png` }}
-          />
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={s.profileName}>{user.username}</div>
-            {player?.display_title
-              ? <div style={s.profileTitle}>👑 {player.display_title}</div>
-              : <div style={s.profileTitle}>⚽ Player</div>
-            }
+          {/* Profile pill */}
+          <div style={s.profilePill}>
+            <img
+              src={`https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png?size=64`}
+              alt={user.username}
+              style={s.avatar}
+              onError={e => { e.target.src = 'https://cdn.discordapp.com/embed/avatars/0.png' }}
+            />
+            <div>
+              <div style={s.profileName}>{user.username}</div>
+              <div style={s.profileTitle}>
+                <span className="material-symbols-outlined" style={{ fontSize: 10, fontVariationSettings: "'FILL' 1" }}>emoji_events</span>
+                {player?.display_title ?? 'Player'}
+              </div>
+            </div>
           </div>
-          <div style={s.trophy}>🏆</div>
-          <div style={s.gear} onClick={() => {}}>⚙️</div>
+
+          {/* Settings */}
+          <button style={s.settingsBtn}><span className="material-symbols-outlined" style={{ fontSize: 20, color: '#fff' }}>settings</span></button>
         </div>
       </header>
 
-      {/* ── MAIN ── */}
+      {/* ── PANELS ── */}
       <div style={s.main}>
-
-
-        {/* ── 3 PANELS ── */}
         <div style={s.panels}>
 
           {/* LEFT — PACKS */}
-          <div style={{ ...s.panel, flex: 1, backgroundImage: "url('/packs.png')" }}>
+          <div style={{ ...s.sidePanel, ...s.purplePanel }}>
             <div style={s.panelOverlay} />
             <div style={s.panelBottom}>
-              {totalPacks > 0 && <div style={s.badge}>{totalPacks}</div>}
-              <button style={s.packBtn} onClick={() => setPage('packs')}>OPEN PACKS</button>
+              <div style={s.panelFooter}>
+                {totalPacks > 0 && <div style={s.badge}>{totalPacks}</div>}
+                <button style={s.packBtn} onClick={() => setPage('packs')}>OPEN PACKS</button>
+              </div>
             </div>
           </div>
 
           {/* CENTER — PLAY MATCH */}
-          <div style={{ ...s.panel, flex: 1.6, backgroundImage: "url('/playmatch.png')", border: '2px solid rgba(240,192,64,0.6)', boxShadow: '0 0 40px rgba(240,192,64,0.15)' }}>
-            <div style={s.panelOverlay} />
-            <div style={s.panelBottom}>
-              <button style={s.findMatchBtn} onClick={() => setPage('battle')}>FIND MATCH</button>
-              <button style={s.friendBtn} onClick={() => setPage('battle')}>👥 PLAY WITH FRIEND</button>
+          <div style={{ ...s.centerPanel, ...s.goldPanel }}>
+            <div style={s.centerOverlay} />
+            <div style={s.centerBottom}>
+              <button style={{ ...s.findMatchBtn }} onClick={() => setPage('battle')}>
+                FIND MATCH
+              </button>
+              <button style={s.friendBtn} onClick={() => setPage('battle')}>
+                <span className="material-symbols-outlined" style={{ fontSize: 16 }}>group</span>
+                PLAY WITH FRIEND
+              </button>
             </div>
           </div>
 
           {/* RIGHT — DECKS */}
-          <div style={{ ...s.panel, flex: 1, backgroundImage: "url('/decks.png')" }}>
+          <div style={{ ...s.sidePanel, ...s.bluePanel }}>
             <div style={s.panelOverlay} />
             <div style={s.panelBottom}>
-              <button style={s.decksBtn} onClick={() => setPage('decks')}>EDIT DECKS</button>
+              <div style={s.panelFooter}>
+                <button style={s.decksBtn} onClick={() => setPage('decks')}>EDIT DECKS</button>
+              </div>
             </div>
           </div>
 
@@ -116,192 +152,225 @@ export default function Home({ token, user, setPage }) {
       </div>
 
       {/* ── BOTTOM NAV ── */}
-      <nav style={s.bottomNav}>
-        <div style={s.navItems}>
-          {NAV.map(item => {
-            const active = item.id === 'home'
-            return (
-              <button key={item.id} onClick={() => setPage(item.id)} style={{
-                ...s.navItem,
-                color: active ? '#f0c040' : '#475569',
-                borderTop: `2px solid ${active ? '#f0c040' : 'transparent'}`,
-              }}>
-                <span style={{ fontSize: 16 }}>{item.icon}</span>
-                <span style={{ fontSize: 10, fontWeight: active ? 700 : 400, letterSpacing: 0.5 }}>{item.label}</span>
-              </button>
-            )
-          })}
-        </div>
-        <div style={s.onlineCount}>
-          <span style={s.onlineDot} />
-          <span style={{ fontSize: 12, color: '#64748b' }}>Online</span>
+      <nav style={s.nav}>
+        <div style={s.navInner}>
+          <div style={s.dock}>
+            {NAV.map(tab => {
+              const active = tab.id === 'home'
+              return (
+                <button key={tab.id} onClick={() => setPage(tab.id)} style={{ ...s.navItem, color: active ? '#ffca45' : 'rgba(255,255,255,0.45)' }}>
+                  <span className="material-symbols-outlined" style={{ fontSize: 20, fontVariationSettings: active ? "'FILL' 1" : "'FILL' 0" }}>{tab.icon}</span>
+                  <span style={{ fontSize: 13, textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: active ? 700 : 400 }}>{tab.label}</span>
+                  {active && <div style={s.activeLine} />}
+                </button>
+              )
+            })}
+          </div>
+          <div style={s.onlineChip}>
+            <span style={s.onlineDot} />
+            <span style={{ fontSize: 11, color: '#4ade80', fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase' }}>Online</span>
+          </div>
         </div>
       </nav>
+
+      <style>{`
+        @keyframes floatEmber {
+          0%   { transform: translateY(100vh) scale(0.5); opacity: 0; }
+          20%  { opacity: 0.8; }
+          80%  { opacity: 0.6; }
+          100% { transform: translateY(-20vh) scale(1.5) translateX(50px); opacity: 0; }
+        }
+        @keyframes pulseBtnGold {
+          0%,100% { box-shadow: 0 4px 20px rgba(228,174,0,0.5); transform: scale(1); }
+          50%      { box-shadow: 0 4px 30px rgba(228,174,0,0.7); transform: scale(1.02); }
+        }
+      `}</style>
     </div>
   )
 }
 
+const HEX = 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)'
+const MONTSERRAT = "'Montserrat', system-ui, sans-serif"
+const INTER = "'Inter', system-ui, sans-serif"
+
 const s = {
   root: {
-    display: 'flex', flexDirection: 'column', height: '100svh',
+    display: 'flex', flexDirection: 'column', height: '100svh', overflow: 'hidden',
     background: `url('/background.png') center center / cover no-repeat`,
-    color: '#e2e8f0', fontFamily: "'Inter', system-ui, sans-serif", overflow: 'hidden',
-    position: 'relative',
+    backgroundColor: '#050914',
+    color: '#dae2fd', fontFamily: INTER, position: 'relative',
   },
+  embers: { position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 0, overflow: 'hidden' },
 
   // Top bar
   topbar: {
-    display: 'flex', alignItems: 'center', gap: 16,
-    padding: '0 20px', height: 60, flexShrink: 0,
-    background: 'rgba(5,7,15,0.85)', backdropFilter: 'blur(16px)',
-    borderBottom: '1px solid rgba(255,255,255,0.07)',
+    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+    padding: '18px 24px', position: 'relative', zIndex: 10, flexShrink: 0,
   },
-  logo: { display: 'flex', alignItems: 'center', gap: 10, marginRight: 8 },
-  logoIcon: {
-    width: 36, height: 36, borderRadius: 8,
-    background: 'linear-gradient(135deg,#7c3aed,#a855f7)',
-    display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18,
+  logoArea: { display: 'flex', alignItems: 'center', gap: 12 },
+  logoHex: {
+    width: 48, height: 48, clipPath: HEX,
+    background: '#171f33', border: '1px solid rgba(255,255,255,0.15)',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    boxShadow: '0 0 20px rgba(168,85,247,0.2)',
   },
-  logoText: { fontSize: 18, fontWeight: 900, letterSpacing: 1, lineHeight: 1.1 },
-  logoSub: { fontSize: 9, color: '#475569', letterSpacing: 1.5, fontWeight: 600 },
-  currencies: { flex: 1, display: 'flex', justifyContent: 'center', gap: 10 },
-  coinChip: {
-    display: 'flex', alignItems: 'center', gap: 6,
-    background: 'rgba(240,192,64,0.1)', border: '1px solid rgba(240,192,64,0.3)',
-    borderRadius: 20, padding: '5px 14px', fontSize: 15, color: '#f0c040',
-  },
-  plus: {
-    width: 18, height: 18, borderRadius: '50%',
-    background: 'rgba(240,192,64,0.2)', display: 'flex', alignItems: 'center',
-    justifyContent: 'center', fontSize: 14, cursor: 'pointer',
-  },
-  profileBlock: { display: 'flex', alignItems: 'center', gap: 8, maxWidth: 220 },
-  avatar: { width: 38, height: 38, borderRadius: '50%', border: '2px solid #a855f7', objectFit: 'cover', flexShrink: 0 },
-  profileName: { fontSize: 13, fontWeight: 700, lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' },
-  profileTitle: { fontSize: 10, color: '#f0c040', fontWeight: 600, letterSpacing: 0.3 },
-  xpBarBg: { width: '100%', height: 3, background: 'rgba(255,255,255,0.1)', borderRadius: 2, marginTop: 3 },
-  xpBarFill: { height: '100%', background: 'linear-gradient(90deg,#a855f7,#7c3aed)', borderRadius: 2, transition: 'width 0.4s' },
-  trophy: { fontSize: 22, flexShrink: 0 },
-  gear: { fontSize: 18, opacity: 0.5, cursor: 'pointer', flexShrink: 0 },
+  logoText: { fontFamily: MONTSERRAT, fontSize: 28, fontWeight: 900, color: '#fff', letterSpacing: 2, lineHeight: 1 },
+  logoSub: { fontFamily: INTER, fontSize: 8, color: '#988d9f', letterSpacing: '0.2em', textTransform: 'uppercase', marginTop: 3 },
 
-  // Main
-  main: {
-    flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
-    padding: '20px 24px', overflow: 'hidden',
+  topRight: { display: 'flex', alignItems: 'center', gap: 12 },
+  currencyPill: {
+    display: 'flex', alignItems: 'center',
+    background: 'rgba(15,23,42,0.8)', backdropFilter: 'blur(12px)',
+    borderRadius: 999, padding: '4px 4px',
+    border: '1px solid rgba(255,255,255,0.05)',
+  },
+  coinBlock: { display: 'flex', alignItems: 'center', gap: 6, padding: '4px 8px 4px 10px' },
+  gemBlock:  { display: 'flex', alignItems: 'center', gap: 6, padding: '4px 8px' },
+  coinIcon: {
+    width: 22, height: 22, borderRadius: '50%',
+    background: 'linear-gradient(135deg,#facc15,#d97706)',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    color: '#3f2e00', fontWeight: 700, fontSize: 11,
+  },
+  currencyVal: { fontFamily: INTER, fontWeight: 700, fontSize: 14, color: '#fff' },
+  addBtn: {
+    width: 22, height: 22, borderRadius: '50%',
+    background: 'rgba(255,255,255,0.1)', border: 'none',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    cursor: 'pointer', color: '#fff', marginLeft: 2,
+  },
+  currencyDivider: { width: 1, height: 24, background: 'rgba(255,255,255,0.1)', margin: '0 2px' },
+
+  profilePill: {
+    display: 'flex', alignItems: 'center', gap: 10,
+    background: 'rgba(15,23,42,0.8)', backdropFilter: 'blur(12px)',
+    borderRadius: 999, padding: '4px 20px 4px 4px',
+    border: '1px solid rgba(255,255,255,0.05)',
+  },
+  avatar: {
+    width: 38, height: 38, borderRadius: '50%', objectFit: 'cover',
+    border: '1.5px solid #ef4444',
+    boxShadow: '0 0 10px rgba(239,68,68,0.3)',
+  },
+  profileName: { fontFamily: INTER, fontWeight: 700, fontSize: 13, color: '#fff', lineHeight: 1.2 },
+  profileTitle: {
+    display: 'flex', alignItems: 'center', gap: 3,
+    fontSize: 9, color: '#ffca45', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase',
+  },
+  settingsBtn: {
+    width: 40, height: 40, borderRadius: '50%',
+    background: 'rgba(15,23,42,0.8)', backdropFilter: 'blur(12px)',
+    border: '1px solid rgba(255,255,255,0.05)',
+    display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
   },
 
   // Panels
-  panels: { display: 'flex', gap: 14, width: '100%', height: '75%', maxHeight: 520 },
-
-  panel: {
-    borderRadius: 16, overflow: 'hidden', position: 'relative',
-    backgroundSize: 'cover', backgroundPosition: 'center',
-    display: 'flex', flexDirection: 'column', justifyContent: 'flex-end',
-    border: '1px solid rgba(255,255,255,0.08)',
-  },
-  panelOverlay: {
-    position: 'absolute', inset: 0,
-    background: 'linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.1) 55%, transparent 100%)',
-    pointerEvents: 'none',
-  },
-  panelBottom: {
-    position: 'relative', zIndex: 1,
-    display: 'flex', flexDirection: 'column', gap: 8, padding: '0 14px 14px',
-  },
-
-  // PACKS panel
-  packsPanel: {
-    flex: 1, borderRadius: 16, padding: '18px 16px',
-    background: 'rgba(88,28,135,0.45)', backdropFilter: 'blur(16px)',
-    border: '1px solid rgba(168,85,247,0.3)',
-    display: 'flex', flexDirection: 'column', overflow: 'hidden',
-  },
-  packVisual: {
+  main: {
     flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
-    gap: 0, position: 'relative', minHeight: 0,
+    padding: '0 20px', position: 'relative', zIndex: 1, overflow: 'hidden',
   },
-  packEmoji: { fontSize: 52, position: 'absolute', opacity: 0.35 },
+  panels: { display: 'flex', gap: 16, alignItems: 'center', width: '100%', maxWidth: 1200 },
+
+  sidePanel: {
+    flex: 1, height: 480, borderRadius: 20, overflow: 'hidden',
+    position: 'relative', backgroundSize: 'cover', backgroundPosition: 'center',
+    display: 'flex', flexDirection: 'column', justifyContent: 'flex-end',
+  },
+  centerPanel: {
+    flex: 1.4, height: 550, borderRadius: 20, overflow: 'hidden',
+    position: 'relative', backgroundSize: 'cover', backgroundPosition: 'center',
+    display: 'flex', flexDirection: 'column', justifyContent: 'flex-end',
+  },
+  purplePanel: {
+    backgroundImage: "url('/packs.png')",
+    border: '1px solid rgba(183,109,255,0.6)',
+    boxShadow: '0 0 40px rgba(183,109,255,0.2)',
+  },
+  goldPanel: {
+    backgroundImage: "url('/playmatch.png')",
+    border: '2px solid rgba(255,202,69,0.6)',
+    boxShadow: '0 0 40px rgba(255,202,69,0.15)',
+  },
+  bluePanel: {
+    backgroundImage: "url('/decks.png')",
+    border: '1px solid rgba(59,130,246,0.5)',
+    boxShadow: '0 0 40px rgba(59,130,246,0.2)',
+  },
+
+  panelOverlay: {
+    position: 'absolute', inset: 0, pointerEvents: 'none',
+    background: 'linear-gradient(to top, rgba(5,9,20,0.95) 0%, rgba(5,9,20,0.2) 50%, transparent 100%)',
+  },
+  centerOverlay: {
+    position: 'absolute', inset: 0, pointerEvents: 'none',
+    background: 'linear-gradient(to top, rgba(5,9,20,0.98) 0%, rgba(5,9,20,0.1) 45%, transparent 100%)',
+  },
+  panelBottom: { position: 'relative', zIndex: 1, padding: '0 14px 16px' },
+  centerBottom: { position: 'relative', zIndex: 1, padding: '0 16px 20px', display: 'flex', flexDirection: 'column', gap: 10 },
+
+  panelFooter: { display: 'flex', alignItems: 'center', gap: 8 },
   badge: {
-    width: 26, height: 26, borderRadius: '50%',
-    background: '#a855f7', color: '#fff',
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-    fontSize: 13, fontWeight: 700, flexShrink: 0,
+    width: 26, height: 26, borderRadius: '50%', background: '#a855f7',
+    color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center',
+    fontSize: 12, fontWeight: 700, flexShrink: 0,
   },
   packBtn: {
-    flex: 1, background: 'rgba(168,85,247,0.25)',
-    border: '1px solid rgba(168,85,247,0.5)',
-    borderRadius: 10, color: '#fff', padding: '10px 0',
-    fontWeight: 800, fontSize: 13, cursor: 'pointer', letterSpacing: 1,
-    transition: 'background 0.15s',
+    flex: 1, background: 'rgba(58,27,122,0.8)', border: '1px solid rgba(168,85,247,0.6)',
+    borderRadius: 12, color: '#fff', padding: '11px 0',
+    fontFamily: MONTSERRAT, fontWeight: 800, fontSize: 13,
+    cursor: 'pointer', letterSpacing: '0.1em', textTransform: 'uppercase',
+    boxShadow: '0 0 15px rgba(183,109,255,0.3)',
   },
-
-  // MATCH panel
-  matchPanel: {
-    flex: 1.4, borderRadius: 16, padding: '20px 18px',
-    background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(16px)',
-    border: '2px solid rgba(240,192,64,0.5)',
-    boxShadow: '0 0 30px rgba(240,192,64,0.12)',
-    display: 'flex', flexDirection: 'column', alignItems: 'center', overflow: 'hidden',
-  },
-  matchTitle: { fontSize: 26, fontWeight: 900, color: '#f0c040', letterSpacing: 2, marginBottom: 4 },
-  matchSub: { fontSize: 12, color: '#94a3b8', textAlign: 'center', marginBottom: 16, lineHeight: 1.4 },
-  swordsShield: { flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 0 },
-  shieldOuter: {
-    width: 110, height: 110, borderRadius: '50%',
-    background: 'rgba(240,192,64,0.08)',
-    border: '2px solid rgba(240,192,64,0.3)',
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-    boxShadow: '0 0 40px rgba(240,192,64,0.15)',
-  },
-  shieldInner: { fontSize: 52 },
   findMatchBtn: {
-    width: '100%', background: 'linear-gradient(135deg,#d97706,#f0c040)',
-    border: 'none', borderRadius: 12, color: '#000',
-    padding: '13px 0', fontWeight: 900, fontSize: 16,
-    cursor: 'pointer', letterSpacing: 1.5, marginBottom: 8,
-    boxShadow: '0 4px 20px rgba(240,192,64,0.3)',
-    transition: 'opacity 0.15s',
+    width: '100%',
+    background: 'linear-gradient(180deg, #ffca45 0%, #e4ae00 100%)',
+    border: 'none', borderRadius: 12, color: '#1a0a00',
+    padding: '13px 0', fontFamily: MONTSERRAT, fontWeight: 900, fontSize: 16,
+    cursor: 'pointer', letterSpacing: '0.12em', textTransform: 'uppercase',
+    boxShadow: '0 4px 20px rgba(228,174,0,0.5), inset 0 2px 0 rgba(255,255,255,0.4)',
+    animation: 'pulseBtnGold 2.5s infinite',
   },
   friendBtn: {
-    width: '100%', background: 'rgba(255,255,255,0.07)',
-    border: '1px solid rgba(255,255,255,0.12)',
-    borderRadius: 12, color: '#cbd5e1',
-    padding: '11px 0', fontWeight: 600, fontSize: 14,
-    cursor: 'pointer', letterSpacing: 0.5,
-  },
-
-  // DECKS panel
-  decksPanel: {
-    flex: 1, borderRadius: 16, padding: '18px 16px',
-    background: 'rgba(23,37,84,0.5)', backdropFilter: 'blur(16px)',
-    border: '1px solid rgba(59,130,246,0.3)',
-    display: 'flex', flexDirection: 'column', overflow: 'hidden',
-  },
-  deckVisual: {
-    flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
-    position: 'relative', minHeight: 0,
+    width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+    background: 'rgba(11,19,38,0.6)', backdropFilter: 'blur(12px)',
+    border: '1px solid rgba(255,255,255,0.1)', borderRadius: 12,
+    color: 'rgba(255,255,255,0.7)', padding: '11px 0',
+    fontFamily: INTER, fontWeight: 600, fontSize: 14, cursor: 'pointer', letterSpacing: '0.05em',
   },
   decksBtn: {
-    flex: 1, background: 'rgba(59,130,246,0.2)',
-    border: '1px solid rgba(59,130,246,0.4)',
-    borderRadius: 10, color: '#fff', padding: '10px 0',
-    fontWeight: 800, fontSize: 13, cursor: 'pointer', letterSpacing: 1,
+    width: '100%', background: 'rgba(23,37,84,0.8)', border: '1px solid rgba(59,130,246,0.5)',
+    borderRadius: 12, color: '#fff', padding: '11px 0',
+    fontFamily: MONTSERRAT, fontWeight: 800, fontSize: 13,
+    cursor: 'pointer', letterSpacing: '0.1em', textTransform: 'uppercase',
+    boxShadow: '0 0 15px rgba(59,130,246,0.2)',
   },
 
   // Bottom nav
-  bottomNav: {
-    height: 54, flexShrink: 0,
-    background: 'rgba(5,7,15,0.9)', backdropFilter: 'blur(16px)',
-    borderTop: '1px solid rgba(255,255,255,0.07)',
-    display: 'flex', alignItems: 'center', paddingRight: 16,
+  nav: {
+    position: 'relative', zIndex: 10, flexShrink: 0,
+    padding: '0 24px 20px',
+    background: 'linear-gradient(to top, #050914 0%, transparent 100%)',
   },
-  navItems: { flex: 1, display: 'flex', height: '100%' },
+  navInner: { display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' },
+  dock: { display: 'flex', alignItems: 'center', gap: 28, padding: '10px 32px' },
   navItem: {
-    flex: 1, display: 'flex', flexDirection: 'column',
-    alignItems: 'center', justifyContent: 'center', gap: 2,
+    display: 'flex', alignItems: 'center', gap: 6,
     background: 'transparent', border: 'none', cursor: 'pointer',
-    transition: 'color 0.15s', padding: '0 4px', height: '100%',
+    position: 'relative', paddingBottom: 4,
+    fontFamily: INTER, transition: 'color 0.15s',
   },
-  onlineCount: { display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 },
-  onlineDot: { width: 7, height: 7, borderRadius: '50%', background: '#22c55e', boxShadow: '0 0 6px #22c55e' },
+  activeLine: {
+    position: 'absolute', bottom: -4, left: 0, right: 0, height: 2,
+    background: '#ffca45', boxShadow: '0 0 8px rgba(255,202,69,0.8)', borderRadius: 1,
+  },
+  onlineChip: {
+    position: 'absolute', right: 0,
+    display: 'flex', alignItems: 'center', gap: 6,
+    background: 'rgba(15,23,42,0.6)', backdropFilter: 'blur(8px)',
+    borderRadius: 20, padding: '4px 12px', border: '1px solid rgba(255,255,255,0.1)',
+  },
+  onlineDot: {
+    width: 7, height: 7, borderRadius: '50%',
+    background: '#4ade80', boxShadow: '0 0 6px rgba(74,222,128,0.8)',
+  },
 }
