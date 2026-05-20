@@ -375,6 +375,14 @@ async def battle_ws(
                     room["state"] = "resolving"
                     asyncio.create_task(resolve_round(room))
 
+            elif msg.get("type") == "surrender" and room["state"] not in ["game_over", "waiting"]:
+                player_ids = list(room["players"].keys())
+                opp_id = next(pid for pid in player_ids if pid != user_id)
+                room["score"][user_id] = 0
+                room["score"][opp_id] = 3
+                room["state"] = "resolving"
+                asyncio.create_task(end_game(room))
+
             elif msg.get("type") == "rematch_request" and room["state"] == "game_over":
                 room["rematch_requests"].add(user_id)
                 player_ids = list(room["players"].keys())

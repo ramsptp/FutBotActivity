@@ -135,26 +135,34 @@ export default function Packs({ token }) {
       {error && <div style={{ background: '#3d1515', color: '#f87171', borderRadius: 8, padding: '8px 12px', marginBottom: 12, fontSize: 13 }}>{error}</div>}
       {!packs ? (
         <p style={{ color: 'var(--muted)', textAlign: 'center', paddingTop: 40 }}>Loading…</p>
-      ) : Object.entries(PACK_META).map(([key, meta]) => {
-        const count = packs[key] ?? 0
-        return (
-          <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 12, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 14, padding: '14px 16px', marginBottom: 10 }}>
-            <div style={{ fontSize: 32 }}>{meta.icon}</div>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 2 }}>{meta.label}</div>
-              <div style={{ fontSize: 12, color: 'var(--muted)' }}>{meta.desc}</div>
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
-              <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--gold)' }}>×{count}</div>
-              <button
-                disabled={count === 0 || loading}
-                onClick={() => openPack(key)}
-                style={{ background: count > 0 ? 'var(--accent)' : '#333', border: 'none', borderRadius: 8, color: count > 0 ? '#fff' : '#666', padding: '6px 14px', cursor: count > 0 ? 'pointer' : 'not-allowed', fontSize: 13, fontWeight: 600 }}
-              >Open</button>
-            </div>
-          </div>
-        )
-      })}
+      ) : (() => {
+          const owned = Object.entries(PACK_META).filter(([key]) => (packs[key] ?? 0) > 0)
+          if (owned.length === 0) return (
+            <p style={{ color: 'var(--muted)', textAlign: 'center', paddingTop: 40 }}>
+              No packs to open. Buy some from the Shop!
+            </p>
+          )
+          return owned.map(([key, meta]) => {
+            const count = packs[key]
+            return (
+              <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 12, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 14, padding: '14px 16px', marginBottom: 10 }}>
+                <div style={{ fontSize: 32 }}>{meta.icon}</div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 2 }}>{meta.label}</div>
+                  <div style={{ fontSize: 12, color: 'var(--muted)' }}>{meta.desc}</div>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+                  <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--gold)' }}>×{count}</div>
+                  <button
+                    disabled={loading}
+                    onClick={() => openPack(key)}
+                    style={{ background: 'var(--accent)', border: 'none', borderRadius: 8, color: '#fff', padding: '6px 14px', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}
+                  >Open</button>
+                </div>
+              </div>
+            )
+          })
+        })()}
     </div>
   )
 }

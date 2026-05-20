@@ -149,6 +149,12 @@ export default function Battle({ token, participants = [], incomingChallenge, se
     wsRef.current?.send(JSON.stringify({ type: 'rematch_request' }))
   }
 
+  function surrender() {
+    if (window.confirm('Surrender this battle? You will lose.')) {
+      wsRef.current?.send(JSON.stringify({ type: 'surrender' }))
+    }
+  }
+
   function resetToLobby() {
     wsRef.current?.close(); wsRef.current = null
     setScreen('lobby'); setRoundResult(null); setGameResult(null)
@@ -232,7 +238,7 @@ export default function Battle({ token, participants = [], incomingChallenge, se
   /* ── STAT SELECTION (host) ── */
   if (screen === 'stat_selection') return (
     <div className="page">
-      <BattleBar round={round} score={score} opponent={opponentName} />
+      <BattleBar round={round} score={score} opponent={opponentName} onSurrender={surrender} />
       <div style={{ color: 'var(--muted)', fontSize: 13, marginBottom: 12, textAlign: 'center' }}>
         Round {round} — choose your stat
       </div>
@@ -257,7 +263,7 @@ export default function Battle({ token, participants = [], incomingChallenge, se
   /* ── WAITING FOR STAT (guest) ── */
   if (screen === 'waiting_for_stat') return (
     <div className="page">
-      <BattleBar round={round} score={score} opponent={opponentName} />
+      <BattleBar round={round} score={score} opponent={opponentName} onSurrender={surrender} />
       <div style={{ textAlign: 'center', color: 'var(--muted)', fontSize: 14, marginBottom: 20, padding: '12px', background: 'var(--surface)', borderRadius: 10, border: '1px solid var(--border)' }}>
         ⏳ {opponentName} is choosing their stat…
       </div>
@@ -268,7 +274,7 @@ export default function Battle({ token, participants = [], incomingChallenge, se
   /* ── PICKING ── */
   if (screen === 'picking') return (
     <div className="page">
-      <BattleBar round={round} score={score} opponent={opponentName} />
+      <BattleBar round={round} score={score} opponent={opponentName} onSurrender={surrender} />
 
       {/* Active stat display */}
       <div style={{ textAlign: 'center', marginBottom: 16 }}>
@@ -376,7 +382,7 @@ export default function Battle({ token, participants = [], incomingChallenge, se
 
 /* ── Sub-components ── */
 
-function BattleBar({ round, score, opponent }) {
+function BattleBar({ round, score, opponent, onSurrender }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, padding: '8px 14px', marginBottom: 14, gap: 8 }}>
       <span style={{ fontSize: 13, color: 'var(--muted)' }}>Round {round}/5</span>
@@ -384,6 +390,11 @@ function BattleBar({ round, score, opponent }) {
         {score.you} <span style={{ color: 'var(--muted)', fontWeight: 300 }}>—</span> {score.opponent}
       </div>
       <span style={{ fontSize: 12, color: 'var(--muted)' }}>vs {opponent}</span>
+      {onSurrender && (
+        <button onClick={onSurrender} style={{ marginLeft: 8, background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.4)', borderRadius: 6, color: '#ef4444', fontSize: 11, padding: '3px 8px', cursor: 'pointer', fontWeight: 600 }}>
+          Surrender
+        </button>
+      )}
     </div>
   )
 }

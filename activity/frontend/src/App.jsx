@@ -86,7 +86,7 @@ function App() {
       minHeight: '100svh',
       background: "url('/background.png') center center / cover no-repeat fixed",
     } : undefined}>
-      {page === 'home' && <Home token={token} user={user} setPage={setPage} />}
+      {page === 'home' && <Home token={token} user={user} setPage={setPage} participants={participants} />}
       {page === 'collection' && <Collection token={token} />}
       {page === 'decks' && <DeckBuilder token={token} />}
       {page === 'packs' && <Packs token={token} />}

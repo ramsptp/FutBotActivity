@@ -20,7 +20,7 @@ const EMBERS = [
   { left: '92%', size: 5,  delay: '5s',  dur: '7s' },
 ]
 
-export default function Home({ token, user, setPage }) {
+export default function Home({ token, user, setPage, participants = [] }) {
   const [player, setPlayer]             = useState(null)
   const [packs, setPacks]               = useState(null)
   const [starterCards, setStarterCards] = useState(null)
@@ -77,13 +77,6 @@ export default function Home({ token, user, setPage }) {
             <div style={s.coinBlock}>
               <div style={s.coinIcon}>$</div>
               <span style={s.currencyVal}>{player?.coins?.toLocaleString() ?? '—'}</span>
-              <button style={s.addBtn}><span className="material-symbols-outlined" style={{ fontSize: 14 }}>add</span></button>
-            </div>
-            <div style={s.currencyDivider} />
-            <div style={s.gemBlock}>
-              <span className="material-symbols-outlined" style={{ fontSize: 20, color: '#a855f7', fontVariationSettings: "'FILL' 1", filter: 'drop-shadow(0 0 6px rgba(168,85,247,0.8))' }}>diamond</span>
-              <span style={s.currencyVal}>245</span>
-              <button style={s.addBtn}><span className="material-symbols-outlined" style={{ fontSize: 14 }}>add</span></button>
             </div>
           </div>
 
@@ -168,7 +161,8 @@ export default function Home({ token, user, setPage }) {
           </div>
           <div style={s.onlineChip}>
             <span style={s.onlineDot} />
-            <span style={{ fontSize: 11, color: '#4ade80', fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase' }}>Online</span>
+            <span style={{ fontSize: 13, color: '#fff', fontWeight: 700 }}>{participants.length + 1}</span>
+            <span style={{ fontSize: 10, color: '#4ade80', fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase' }}>Online</span>
           </div>
         </div>
       </nav>
