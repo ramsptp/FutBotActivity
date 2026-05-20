@@ -112,7 +112,7 @@ export default function DeckBuilder({ token }) {
           const card = inDeck[i]
           return (
             <div key={i} onClick={() => card && removeCard(card.card_id)} style={{
-              width: 100, flexShrink: 0, borderRadius: 8, overflow: 'hidden',
+              width: 125, flexShrink: 0, borderRadius: 8, overflow: 'hidden',
               cursor: card ? 'pointer' : 'default',
               border: `2px dashed ${card ? 'var(--accent)' : 'rgba(255,255,255,0.1)'}`,
               aspectRatio: '300 / 420',
