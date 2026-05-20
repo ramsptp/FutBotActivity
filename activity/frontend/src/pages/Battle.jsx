@@ -5,13 +5,16 @@ const STAT_LABEL = { attack: '⚔️ Attack', defense: '🛡️ Defense', speed:
 const STAT_COLOR = { attack: '#e74c3c', defense: '#3498db', speed: '#2ecc71' }
 const COUNTER_LABEL = { attack: 'Defense', defense: 'Attack', speed: 'Speed' }
 
-export default function Battle({ token }) {
+export default function Battle({ token, participants = [], incomingChallenge, setIncomingChallenge }) {
   const [screen, setScreen] = useState('lobby')
   const [decks, setDecks] = useState([])
   const [selectedDeck, setSelectedDeck] = useState('')
   const [joinCode, setJoinCode] = useState('')
   const [roomId, setRoomId] = useState('')
   const [error, setError] = useState(null)
+
+  const [rematchRequested, setRematchRequested] = useState(false)
+  const [opponentRequestedRematch, setOpponentRequestedRematch] = useState(false)
 
   // Game state
   const [picksStatThisRound, setPicksStatThisRound] = useState(false)
@@ -83,7 +86,13 @@ export default function Battle({ token }) {
 
         case 'game_over':
           setGameResult(msg)
+          setRematchRequested(false)
+          setOpponentRequestedRematch(false)
           setScreen('game_over')
+          break
+
+        case 'rematch_requested':
+          setOpponentRequestedRematch(true)
           break
 
         case 'opponent_disconnected':
@@ -101,12 +110,47 @@ export default function Battle({ token }) {
     ws.onerror = () => { setError('Connection error.'); setScreen('lobby') }
   }
 
+  function generateId() {
+    return Math.random().toString(36).substring(2, 8).toUpperCase()
+  }
+
   function createRoom() {
     if (!selectedDeck) return setError('Select a deck first')
     setError(null)
-    const id = Math.random().toString(36).substring(2, 8).toUpperCase()
+    const id = generateId()
     setRoomId(id)
     connectWs(id)
+  }
+
+  async function challengePlayer(toUserId) {
+    if (!selectedDeck) return setError('Select a deck first')
+    setError(null)
+    const id = generateId()
+    await apiFetch('/api/challenges', token, {
+      method: 'POST',
+      body: JSON.stringify({ to_user_id: toUserId, room_id: id, deck_name: selectedDeck }),
+    })
+    setRoomId(id)
+    connectWs(id)
+  }
+
+  async function acceptChallenge() {
+    if (!selectedDeck) return setError('Select a deck first')
+    const c = incomingChallenge
+    setIncomingChallenge(null)
+    await apiFetch('/api/challenges/decline', token, { method: 'DELETE' })
+    connectWs(c.room_id)
+  }
+
+  async function declineChallenge() {
+    await apiFetch('/api/challenges/decline', token, { method: 'DELETE' })
+    setIncomingChallenge(null)
+  }
+
+
+  function requestRematch() {
+    setRematchRequested(true)
+    wsRef.current?.send(JSON.stringify({ type: 'rematch_request' }))
   }
 
   function joinRoom() {
@@ -147,13 +191,38 @@ export default function Battle({ token }) {
     <div style={s.root}>
       <h2 style={s.heading}>⚔️ Battle</h2>
       {error && <div style={s.error}>{error}</div>}
+
+      {incomingChallenge && (
+        <div style={s.challengeAlert}>
+          <div style={s.challengeText}>⚔️ <strong>{incomingChallenge.from_name}</strong> challenged you!</div>
+          <div style={s.challengeBtns}>
+            <button style={s.acceptBtn} onClick={acceptChallenge}>Accept</button>
+            <button style={s.declineBtn} onClick={declineChallenge}>Decline</button>
+          </div>
+        </div>
+      )}
+
       <label style={s.label}>Select your deck</label>
       <select style={s.select} value={selectedDeck} onChange={e => setSelectedDeck(e.target.value)}>
         <option value="">— choose a deck —</option>
         {decks.map(d => <option key={d.deck_name} value={d.deck_name}>{d.deck_name}</option>)}
       </select>
+
+      {participants.length > 0 && (
+        <>
+          <div style={s.sectionLabel}>Players in this session</div>
+          {participants.map(p => (
+            <div key={p.user_id} style={s.participantRow}>
+              <div style={s.participantName}>👤 {p.name}</div>
+              <button style={s.challengeBtn} onClick={() => challengePlayer(p.user_id)}>Challenge</button>
+            </div>
+          ))}
+          <div style={s.divider}>or use a room code</div>
+        </>
+      )}
+
       <button style={s.primaryBtn} onClick={createRoom}>Create Room</button>
-      <div style={s.divider}>or join a friend's room</div>
+      <div style={s.divider}>join with a code</div>
       <div style={s.joinRow}>
         <input
           style={s.codeInput}
@@ -271,7 +340,18 @@ export default function Battle({ token }) {
         <div style={s.scoreDash}>—</div>
         <ScoreBlock label={opponentName} value={gameResult.final_score.opponent} />
       </div>
-      <button style={s.primaryBtn} onClick={resetToLobby}>Play Again</button>
+      {opponentRequestedRematch && !rematchRequested && (
+        <div style={s.rematchAlert}>{opponentName} wants a rematch!</div>
+      )}
+      {rematchRequested && !opponentRequestedRematch && (
+        <div style={s.rematchWaiting}>Waiting for {opponentName} to accept…</div>
+      )}
+      {!rematchRequested && (
+        <button style={s.primaryBtn} onClick={requestRematch}>
+          {opponentRequestedRematch ? 'Accept Rematch' : 'Rematch'}
+        </button>
+      )}
+      <button style={s.ghostBtn} onClick={resetToLobby}>Back to Lobby</button>
     </div>
   )
 
@@ -338,6 +418,17 @@ const s = {
   select: { width: '100%', background: '#16213e', border: '1px solid #2a2a4a', borderRadius: 8, color: '#fff', padding: '10px 12px', fontSize: 14, marginBottom: 14 },
   primaryBtn: { width: '100%', background: '#5865f2', border: 'none', borderRadius: 10, color: '#fff', padding: '12px', fontSize: 15, fontWeight: 600, cursor: 'pointer', marginBottom: 8 },
   ghostBtn: { background: 'transparent', border: '1px solid #444', borderRadius: 10, color: '#aaa', padding: '10px 24px', fontSize: 14, cursor: 'pointer' },
+  challengeAlert: { background: '#1a2a1a', border: '1px solid #4caf50', borderRadius: 10, padding: '12px 14px', marginBottom: 14 },
+  challengeText: { fontSize: 14, marginBottom: 10 },
+  challengeBtns: { display: 'flex', gap: 8 },
+  acceptBtn: { flex: 1, background: '#4caf50', border: 'none', borderRadius: 8, color: '#fff', padding: '8px', cursor: 'pointer', fontWeight: 600 },
+  declineBtn: { flex: 1, background: '#c0392b', border: 'none', borderRadius: 8, color: '#fff', padding: '8px', cursor: 'pointer' },
+  sectionLabel: { color: '#888', fontSize: 12, margin: '4px 0 8px' },
+  participantRow: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#16213e', borderRadius: 8, padding: '10px 14px', marginBottom: 8 },
+  participantName: { fontSize: 14 },
+  challengeBtn: { background: '#5865f2', border: 'none', borderRadius: 8, color: '#fff', padding: '6px 14px', cursor: 'pointer', fontSize: 13, fontWeight: 600 },
+  rematchAlert: { background: '#1a2a1a', border: '1px solid #4caf50', borderRadius: 8, padding: '10px 14px', color: '#4caf50', fontSize: 14, marginBottom: 8, textAlign: 'center' },
+  rematchWaiting: { color: '#888', fontSize: 14, marginBottom: 8 },
   divider: { color: '#555', fontSize: 13, textAlign: 'center', margin: '12px 0' },
   joinRow: { display: 'flex', gap: 8 },
   codeInput: { flex: 1, background: '#16213e', border: '1px solid #2a2a4a', borderRadius: 8, color: '#fff', padding: '10px 12px', fontSize: 16, letterSpacing: 4, textTransform: 'uppercase' },

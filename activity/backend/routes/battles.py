@@ -3,15 +3,79 @@ import json
 import os
 import time
 import httpx
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query, Depends
+from pydantic import BaseModel
+from auth import get_current_user
 
 router = APIRouter()
 
 ROUNDS = 5
-# P1 chooses stat; P2 must counter with the paired stat
 COUNTER = {"attack": "defense", "defense": "attack", "speed": "speed"}
+CHALLENGE_TTL = 60  # seconds
 
 rooms: dict[str, dict] = {}
+
+# Lobby: channel_id -> {user_id: {name, expires_at}}
+lobby: dict[str, dict] = {}
+
+# Pending challenges: to_user_id -> {from_user_id, from_name, room_id, deck_name, expires_at}
+pending_challenges: dict[str, dict] = {}
+
+
+# --- Lobby & Challenge REST endpoints ---
+
+class LobbyRegister(BaseModel):
+    channel_id: str
+
+class ChallengeBody(BaseModel):
+    to_user_id: str
+    room_id: str
+    deck_name: str
+
+@router.post("/api/lobby/register")
+async def register_lobby(body: LobbyRegister, discord_user=Depends(get_current_user)):
+    user_id = discord_user["id"]
+    name = discord_user["username"]
+    channel = lobby.setdefault(body.channel_id, {})
+    channel[user_id] = {"name": name, "expires_at": time.time() + 35}
+    return {"ok": True}
+
+@router.get("/api/lobby/participants")
+async def get_participants(channel_id: str, discord_user=Depends(get_current_user)):
+    user_id = discord_user["id"]
+    now = time.time()
+    channel = lobby.get(channel_id, {})
+    return [
+        {"user_id": uid, "name": info["name"]}
+        for uid, info in channel.items()
+        if uid != user_id and info["expires_at"] > now
+    ]
+
+@router.post("/api/challenges")
+async def send_challenge(body: ChallengeBody, discord_user=Depends(get_current_user)):
+    from_id = discord_user["id"]
+    pending_challenges[body.to_user_id] = {
+        "from_user_id": from_id,
+        "from_name": discord_user["username"],
+        "room_id": body.room_id,
+        "deck_name": body.deck_name,
+        "expires_at": time.time() + CHALLENGE_TTL,
+    }
+    return {"ok": True}
+
+@router.get("/api/challenges/incoming")
+async def get_incoming_challenge(discord_user=Depends(get_current_user)):
+    user_id = discord_user["id"]
+    challenge = pending_challenges.get(user_id)
+    if not challenge or challenge["expires_at"] < time.time():
+        pending_challenges.pop(user_id, None)
+        return None
+    return challenge
+
+@router.delete("/api/challenges/decline")
+async def decline_challenge(discord_user=Depends(get_current_user)):
+    pending_challenges.pop(discord_user["id"], None)
+    return {"ok": True}
 
 
 async def verify_ws_token(token: str):
@@ -237,6 +301,7 @@ async def battle_ws(
             "chosen_stat": None,
             "picks": {},
             "score": {},
+            "rematch_requests": set(),
         }
 
     room = rooms[room_id]
@@ -246,7 +311,7 @@ async def battle_ws(
         await websocket.close()
         return
 
-    room["players"][user_id] = {"ws": websocket, "name": username, "hand": hand}
+    room["players"][user_id] = {"ws": websocket, "name": username, "hand": hand, "deck_name": deck_name}
     room["score"][user_id] = 0
 
     if len(room["players"]) == 1:
@@ -300,6 +365,27 @@ async def battle_ws(
                 if len(room["picks"]) == 2:
                     room["state"] = "resolving"
                     asyncio.create_task(resolve_round(room))
+
+            elif msg.get("type") == "rematch_request" and room["state"] == "game_over":
+                room["rematch_requests"].add(user_id)
+                player_ids = list(room["players"].keys())
+                opp_id = next(pid for pid in player_ids if pid != user_id)
+                await send_to(room["players"][opp_id], {"type": "rematch_requested"})
+
+                if len(room["rematch_requests"]) == 2:
+                    # Reload decks and reset room
+                    from db import get_db
+                    db = get_db()
+                    for pid in player_ids:
+                        fresh_hand = load_deck(db, int(pid), room["players"][pid]["deck_name"])
+                        room["players"][pid]["hand"] = fresh_hand or []
+                    room["round"] = 1
+                    room["score"] = {pid: 0 for pid in player_ids}
+                    room["state"] = "stat_selection"
+                    room["rematch_requests"] = set()
+                    room["picks"] = {}
+                    room["chosen_stat"] = None
+                    asyncio.create_task(start_round(room))
 
     except WebSocketDisconnect:
         room["players"].pop(user_id, None)

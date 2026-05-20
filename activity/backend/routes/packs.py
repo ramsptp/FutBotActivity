@@ -38,18 +38,20 @@ def draw_unique(db, query, params, user_id: int, max_tries=200):
 def open_rare_player_pack(db, user_id: int):
     ndt = NON_DROPPABLE_TYPES
     ndt_sql = ",".join("?" * len(ndt))
-    card = draw_unique(
-        db,
-        f"""SELECT * FROM cards WHERE
-            CASE WHEN RANDOM() % 10 < 8 THEN card_type = 'Standard'
-            ELSE card_type != 'Standard' AND card_type NOT IN ({ndt_sql}) END
-            AND overall > 85 ORDER BY RANDOM() LIMIT 1""",
-        ndt,
-        user_id,
-    )
-    if not card:
-        raise HTTPException(status_code=500, detail="Could not find a unique card")
-    return [card]
+    for _ in range(200):
+        chosen_type = random.choices(["Standard", "Other"], [0.8, 0.2])[0]
+        if chosen_type == "Standard":
+            row = db.execute(
+                "SELECT * FROM cards WHERE card_type = 'Standard' AND overall > 85 ORDER BY RANDOM() LIMIT 1"
+            ).fetchone()
+        else:
+            row = db.execute(
+                f"SELECT * FROM cards WHERE card_type != 'Standard' AND card_type NOT IN ({ndt_sql}) AND overall > 85 ORDER BY RANDOM() LIMIT 1",
+                ndt,
+            ).fetchone()
+        if row and not is_duplicate(db, user_id, row["card_id"]):
+            return [row]
+    raise HTTPException(status_code=500, detail="Could not find a unique card")
 
 
 def open_icon_pack(db, user_id: int):
@@ -73,18 +75,23 @@ def open_tester_pack(db, user_id: int):
     if not icon:
         raise HTTPException(status_code=500, detail="Could not find a unique Icon card")
     cards = [icon]
+    drawn_ids = {icon["card_id"]}
     for _ in range(4):
-        card = draw_unique(
-            db,
-            f"""SELECT * FROM cards WHERE
-                CASE WHEN RANDOM() % 10 < 9 THEN card_type = 'Standard'
-                ELSE card_type != 'Standard' AND card_type NOT IN ({ndt_sql}) END
-                AND overall > 85 ORDER BY RANDOM() LIMIT 1""",
-            ndt,
-            user_id,
-        )
-        if card:
-            cards.append(card)
+        for _ in range(200):
+            chosen_type = random.choices(["Standard", "Other"], [0.9, 0.1])[0]
+            if chosen_type == "Standard":
+                row = db.execute(
+                    "SELECT * FROM cards WHERE card_type = 'Standard' AND overall > 85 ORDER BY RANDOM() LIMIT 1"
+                ).fetchone()
+            else:
+                row = db.execute(
+                    f"SELECT * FROM cards WHERE card_type != 'Standard' AND card_type NOT IN ({ndt_sql}) AND overall > 85 ORDER BY RANDOM() LIMIT 1",
+                    ndt,
+                ).fetchone()
+            if row and row["card_id"] not in drawn_ids and not is_duplicate(db, user_id, row["card_id"]):
+                cards.append(row)
+                drawn_ids.add(row["card_id"])
+                break
     return cards
 
 

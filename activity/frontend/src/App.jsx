@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { DiscordSDK } from '@discord/embedded-app-sdk'
+import { discordSdk } from './lib/discord'
+import { apiFetch } from './lib/api'
 import Nav from './components/Nav'
 import Home from './pages/Home'
 import Collection from './pages/Collection'
@@ -7,13 +8,14 @@ import DeckBuilder from './pages/DeckBuilder'
 import Battle from './pages/Battle'
 import Packs from './pages/Packs'
 
-const discordSdk = new DiscordSDK(import.meta.env.VITE_CLIENT_ID)
-
 function App() {
   const [auth, setAuth] = useState(null)
   const [error, setError] = useState(null)
   const [page, setPage] = useState('home')
+  const [participants, setParticipants] = useState([])
+  const [incomingChallenge, setIncomingChallenge] = useState(null)
   const authing = useRef(false)
+  const pollRef = useRef(null)
 
   useEffect(() => {
     if (authing.current) return
@@ -42,9 +44,31 @@ function App() {
 
       const result = await discordSdk.commands.authenticate({ access_token })
       setAuth({ ...result, access_token })
+      startLobby(access_token)
     } catch (e) {
       setError(e.message)
     }
+  }
+
+  function startLobby(token) {
+    const channelId = discordSdk.channelId
+    if (!channelId) return
+
+    const register = () => apiFetch('/api/lobby/register', token, {
+      method: 'POST',
+      body: JSON.stringify({ channel_id: channelId }),
+    }).catch(() => {})
+
+    const fetchParticipants = async () => {
+      const parts = await apiFetch(`/api/lobby/participants?channel_id=${channelId}`, token).catch(() => [])
+      setParticipants(parts || [])
+      const challenge = await apiFetch('/api/challenges/incoming', token).catch(() => null)
+      setIncomingChallenge(prev => challenge || prev)
+    }
+
+    register()
+    fetchParticipants()
+    pollRef.current = setInterval(() => { register(); fetchParticipants() }, 5000)
   }
 
   if (error) return <div style={{ color: 'red', padding: 24 }}>Error: {error}</div>
@@ -59,7 +83,14 @@ function App() {
       {page === 'collection' && <Collection token={token} />}
       {page === 'decks' && <DeckBuilder token={token} />}
       {page === 'packs' && <Packs token={token} />}
-      {page === 'battle' && <Battle token={token} />}
+      {page === 'battle' && (
+        <Battle
+          token={token}
+          participants={participants}
+          incomingChallenge={incomingChallenge}
+          setIncomingChallenge={setIncomingChallenge}
+        />
+      )}
       <Nav page={page} setPage={setPage} />
     </>
   )
