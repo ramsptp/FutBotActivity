@@ -8,6 +8,7 @@ import DeckBuilder from './pages/DeckBuilder'
 import Battle from './pages/Battle'
 import Packs from './pages/Packs'
 import Shop from './pages/Shop'
+import LoadingScreen from './components/LoadingScreen'
 
 function App() {
   const [auth, setAuth] = useState(null)
@@ -72,8 +73,8 @@ function App() {
     pollRef.current = setInterval(() => { register(); fetchParticipants() }, 5000)
   }
 
-  if (error) return <div style={{ color: 'red', padding: 24 }}>Error: {error}</div>
-  if (!auth) return <div style={{ padding: 24 }}>Authenticating...</div>
+  if (error) return <LoadingScreen message={error} error />
+  if (!auth) return <LoadingScreen />
 
   const token = auth.access_token
   const user = auth.user
