@@ -32,10 +32,11 @@ async def exchange_token(body: TokenRequest):
 @router.get("/me")
 async def get_me(discord_user=Depends(get_current_user)):
     user_id = discord_user["id"]
+    username = discord_user["username"]
     db = get_db()
-    player = db.execute(
-        "SELECT * FROM players WHERE user_id = ?", (user_id,)
-    ).fetchone()
+    player = db.execute("SELECT * FROM players WHERE user_id = ?", (user_id,)).fetchone()
     if not player:
-        raise HTTPException(status_code=404, detail="Player not found")
+        db.execute("INSERT INTO players (user_id, name) VALUES (?, ?)", (int(user_id), username))
+        db.commit()
+        player = db.execute("SELECT * FROM players WHERE user_id = ?", (user_id,)).fetchone()
     return {**discord_user, "player": dict(player)}

@@ -1,13 +1,21 @@
 import { useEffect, useState } from 'react'
 import { apiFetch } from '../lib/api'
+import StarterPackModal from '../components/StarterPackModal'
 
 export default function Home({ token, user, setPage }) {
   const [player, setPlayer] = useState(null)
+  const [starterCards, setStarterCards] = useState(null)
 
   useEffect(() => {
-    apiFetch('/api/me', token)
-      .then(data => setPlayer(data.player))
-      .catch(() => {})
+    apiFetch('/api/me', token).then(async data => {
+      setPlayer(data.player)
+      if (!data.player.has_claimed_starter_pack) {
+        try {
+          const cards = await apiFetch('/api/packs/starter', token, { method: 'POST' })
+          setStarterCards(cards)
+        } catch {}
+      }
+    }).catch(() => {})
   }, [])
 
   const winRate = player && player.battles_played > 0
@@ -16,6 +24,9 @@ export default function Home({ token, user, setPage }) {
 
   return (
     <div style={styles.root}>
+      {starterCards && (
+        <StarterPackModal cards={starterCards} onClose={() => setStarterCards(null)} />
+      )}
       <div style={styles.profile}>
         <img
           src={`https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png?size=80`}

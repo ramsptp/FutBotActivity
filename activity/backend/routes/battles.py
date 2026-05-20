@@ -166,7 +166,8 @@ async def resolve_round(room):
     await asyncio.sleep(4)
 
     hands_empty = any(len(room["players"][pid]["hand"]) == 0 for pid in player_ids)
-    if room["round"] > ROUNDS or hands_empty:
+    someone_won = any(room["score"][pid] >= 3 for pid in player_ids)
+    if room["round"] > ROUNDS or hands_empty or someone_won:
         await end_game(room)
     else:
         await start_round(room)

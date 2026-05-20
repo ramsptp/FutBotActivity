@@ -9,3 +9,4 @@ activity/frontend/node_modules/
 __pycache__/
 *.pyc
 node_modules/
+futbot/
