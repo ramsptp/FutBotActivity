@@ -160,6 +160,22 @@ export default function Home({ token, user, setPage, participants = [] }) {
             })}
           </div>
           <div style={s.onlineChip}>
+            {/* Avatar stack — current user + participants */}
+            <div style={{ display: 'flex' }}>
+              <img
+                src={`https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png?size=32`}
+                style={{ width: 24, height: 24, borderRadius: '50%', border: '2px solid #0f172a', objectFit: 'cover', marginRight: -6, zIndex: 2 }}
+                onError={e => { e.target.src = 'https://cdn.discordapp.com/embed/avatars/0.png' }}
+              />
+              {participants.slice(0, 3).map((p, i) => (
+                <img
+                  key={p.user_id}
+                  src={`https://cdn.discordapp.com/avatars/${p.user_id}/0.png?size=32`}
+                  style={{ width: 24, height: 24, borderRadius: '50%', border: '2px solid #0f172a', objectFit: 'cover', marginRight: -6, zIndex: 1 - i }}
+                  onError={e => { e.target.src = 'https://cdn.discordapp.com/embed/avatars/1.png' }}
+                />
+              ))}
+            </div>
             <span style={s.onlineDot} />
             <span style={{ fontSize: 13, color: '#fff', fontWeight: 700 }}>{participants.length + 1}</span>
             <span style={{ fontSize: 10, color: '#4ade80', fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase' }}>Online</span>
@@ -260,20 +276,25 @@ const s = {
 
   // Panels
   main: {
-    flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
-    padding: '0 20px', position: 'relative', zIndex: 1, overflow: 'hidden',
+    flex: 1, display: 'flex', alignItems: 'stretch', justifyContent: 'center',
+    padding: '10px 20px', position: 'relative', zIndex: 1, overflow: 'hidden',
   },
-  panels: { display: 'flex', gap: 16, alignItems: 'center', width: '100%', maxWidth: 1200 },
+  panels: {
+    display: 'flex', gap: 'clamp(8px, 1.2vw, 16px)',
+    alignItems: 'stretch', width: '100%', maxWidth: 1200,
+  },
 
   sidePanel: {
-    flex: 1, height: 480, borderRadius: 20, overflow: 'hidden',
+    flex: 1, borderRadius: 'clamp(12px,1.5vw,20px)', overflow: 'hidden',
     position: 'relative', backgroundSize: 'cover', backgroundPosition: 'center',
     display: 'flex', flexDirection: 'column', justifyContent: 'flex-end',
+    minHeight: 0,
   },
   centerPanel: {
-    flex: 1.4, height: 550, borderRadius: 20, overflow: 'hidden',
+    flex: 1.4, borderRadius: 'clamp(12px,1.5vw,20px)', overflow: 'hidden',
     position: 'relative', backgroundSize: 'cover', backgroundPosition: 'center',
     display: 'flex', flexDirection: 'column', justifyContent: 'flex-end',
+    minHeight: 0,
   },
   purplePanel: {
     backgroundImage: "url('/packs.png')",
@@ -299,8 +320,8 @@ const s = {
     position: 'absolute', inset: 0, pointerEvents: 'none',
     background: 'linear-gradient(to top, rgba(5,9,20,0.98) 0%, rgba(5,9,20,0.1) 45%, transparent 100%)',
   },
-  panelBottom: { position: 'relative', zIndex: 1, padding: '0 14px 16px' },
-  centerBottom: { position: 'relative', zIndex: 1, padding: '0 16px 20px', display: 'flex', flexDirection: 'column', gap: 10 },
+  panelBottom: { position: 'relative', zIndex: 1, padding: 'clamp(0px,1vh,0px) clamp(10px,1.2vw,14px) clamp(10px,1.5vh,16px)' },
+  centerBottom: { position: 'relative', zIndex: 1, padding: 'clamp(0px,1vh,0px) clamp(12px,1.4vw,16px) clamp(12px,1.8vh,20px)', display: 'flex', flexDirection: 'column', gap: 'clamp(6px,0.8vh,10px)' },
 
   panelFooter: { display: 'flex', alignItems: 'center', gap: 8 },
   badge: {
