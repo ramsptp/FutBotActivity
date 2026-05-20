@@ -7,7 +7,7 @@ const TABS = [
   { id: 'battle',     icon: 'swords',         label: 'Battle' },
 ]
 
-export default function Nav({ page, setPage }) {
+export default function Nav({ page, setPage, participants = [], user }) {
   return (
     <nav style={s.nav}>
       <div style={s.inner}>
@@ -31,7 +31,25 @@ export default function Nav({ page, setPage }) {
 
         {/* Online indicator */}
         <div style={s.online}>
+          {user && (
+            <div style={{ display: 'flex', marginRight: 2 }}>
+              <img
+                src={`https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png?size=32`}
+                style={{ width: 22, height: 22, borderRadius: '50%', border: '2px solid #050914', objectFit: 'cover', marginRight: -6, zIndex: 2 }}
+                onError={e => { e.target.src = 'https://cdn.discordapp.com/embed/avatars/0.png' }}
+              />
+              {participants.slice(0, 3).map((p, i) => (
+                <img
+                  key={p.user_id}
+                  src={`https://cdn.discordapp.com/avatars/${p.user_id}/0.png?size=32`}
+                  style={{ width: 22, height: 22, borderRadius: '50%', border: '2px solid #050914', objectFit: 'cover', marginRight: -6, zIndex: 1 - i }}
+                  onError={e => { e.target.src = 'https://cdn.discordapp.com/embed/avatars/1.png' }}
+                />
+              ))}
+            </div>
+          )}
           <span style={s.onlineDot} />
+          <span style={{ fontSize: 12, color: '#fff', fontWeight: 700 }}>{participants.length + 1}</span>
           <span style={s.onlineText}>Online</span>
         </div>
       </div>

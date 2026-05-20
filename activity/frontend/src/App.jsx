@@ -99,7 +99,7 @@ function App() {
           setIncomingChallenge={setIncomingChallenge}
         />
       )}
-      {page !== 'home' && <Nav page={page} setPage={setPage} />}
+      {page !== 'home' && <Nav page={page} setPage={setPage} participants={participants} user={user} />}
     </div>
   )
 }
