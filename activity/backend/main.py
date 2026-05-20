@@ -3,7 +3,11 @@ load_dotenv()
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from routes.auth import router as auth_router
+from routes.collection import router as collection_router
+from routes.decks import router as decks_router
+from db import get_db
 
 app = FastAPI()
 
@@ -15,7 +19,22 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Serve card images from wherever they're stored on disk
+def get_images_dir():
+    db = get_db()
+    row = db.execute("SELECT image_path FROM cards WHERE image_path IS NOT NULL LIMIT 1").fetchone()
+    if row:
+        import os
+        return os.path.dirname(row["image_path"])
+    return None
+
+images_dir = get_images_dir()
+if images_dir:
+    app.mount("/images", StaticFiles(directory=images_dir), name="images")
+
 app.include_router(auth_router, prefix="/api")
+app.include_router(collection_router, prefix="/api")
+app.include_router(decks_router, prefix="/api")
 
 @app.get("/api/health")
 def health():

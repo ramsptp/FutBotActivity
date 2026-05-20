@@ -1,13 +1,22 @@
-import os
+import time
 import httpx
 from fastapi import HTTPException, Header
 
 DISCORD_API = "https://discord.com/api/v10"
 
+# token -> (user_data, expires_at)
+_token_cache: dict = {}
+CACHE_TTL = 300  # 5 minutes
+
 async def get_current_user(authorization: str = Header(...)):
     if not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Invalid authorization header")
     token = authorization.removeprefix("Bearer ")
+
+    cached = _token_cache.get(token)
+    if cached and time.time() < cached[1]:
+        return cached[0]
+
     async with httpx.AsyncClient() as client:
         resp = await client.get(
             f"{DISCORD_API}/users/@me",
@@ -15,4 +24,7 @@ async def get_current_user(authorization: str = Header(...)):
         )
     if resp.status_code != 200:
         raise HTTPException(status_code=401, detail="Invalid Discord token")
-    return resp.json()
+
+    user = resp.json()
+    _token_cache[token] = (user, time.time() + CACHE_TTL)
+    return user
