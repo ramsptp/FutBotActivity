@@ -36,7 +36,7 @@ export default function Collection({ token }) {
         <span style={{ color: 'var(--muted)', fontSize: 14 }}>{cards.length} cards</span>
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 14 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 14, background: 'rgba(10,14,26,0.6)', backdropFilter: 'blur(8px)', borderRadius: 10, padding: '10px 12px' }}>
         <FilterRow label="Rarity"   opts={RARITIES}  val={filters.rarity}    set={v => setFilter('rarity', v)} />
         <FilterRow label="Position" opts={POSITIONS} val={filters.position}  set={v => setFilter('position', v)} />
         <FilterRow label="Type"     opts={TYPES}     val={filters.card_type} set={v => setFilter('card_type', v)} />
@@ -70,10 +70,11 @@ function FilterRow({ label, opts, val, set }) {
       {opts.map(o => (
         <button key={o} onClick={() => set(o)} style={{
           padding: '3px 10px', borderRadius: 20,
-          border: `1px solid ${val === o ? 'var(--accent)' : 'rgba(255,255,255,0.12)'}`,
-          background: val === o ? 'var(--accent)' : 'transparent',
-          color: val === o ? '#fff' : 'var(--muted)',
+          border: `1px solid ${val === o ? 'var(--accent)' : 'rgba(255,255,255,0.2)'}`,
+          background: val === o ? 'var(--accent)' : 'rgba(10,14,26,0.75)',
+          color: val === o ? '#fff' : '#cbd5e1',
           fontSize: 12, cursor: 'pointer', transition: 'all 0.15s',
+          backdropFilter: 'blur(6px)',
         }}>{o}</button>
       ))}
     </div>
@@ -98,21 +99,20 @@ function CardModal({ card, onClose }) {
 
         <div style={{ textAlign: 'center' }}>
           <div style={{ fontSize: 20, fontWeight: 700, marginBottom: 4 }}>{card.name}</div>
-          <div style={{ color: rarityColor, fontSize: 13, marginBottom: 14 }}>
+          <div style={{ color: rarityColor, fontSize: 13, marginBottom: 12 }}>
             {card.card_rarity} · {card.card_type}
           </div>
 
-          <div style={{ display: 'flex', justifyContent: 'center', gap: 20, marginBottom: 14 }}>
-            {[['OVR', card.overall, '#f0c040'], ['ATK', card.attack, '#ef4444'], ['DEF', card.defense, '#3b82f6'], ['SPD', card.speed, '#22c55e']].map(([l, v, c]) => (
+          <div style={{ fontSize: 32, fontWeight: 900, color: '#f0c040' }}>{card.overall}</div>
+          <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 14 }}>OVR</div>
+
+          <div style={{ display: 'flex', justifyContent: 'center', gap: 24, marginBottom: 20 }}>
+            {[['ATK', card.attack, '#ef4444'], ['DEF', card.defense, '#3b82f6'], ['SPD', card.speed, '#22c55e']].map(([l, v, c]) => (
               <div key={l} style={{ textAlign: 'center' }}>
                 <div style={{ fontSize: 22, fontWeight: 800, color: c }}>{v}</div>
                 <div style={{ fontSize: 11, color: 'var(--muted)' }}>{l}</div>
               </div>
             ))}
-          </div>
-
-          <div style={{ display: 'flex', justifyContent: 'center', gap: 10, flexWrap: 'wrap', fontSize: 12, color: 'var(--muted)', marginBottom: 16 }}>
-            <span>{card.position}</span><span>·</span><span>{card.club}</span><span>·</span><span>{card.nation}</span>
           </div>
 
           <button className="btn-primary" onClick={onClose}>Close</button>

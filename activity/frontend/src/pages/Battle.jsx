@@ -233,21 +233,24 @@ export default function Battle({ token, participants = [], incomingChallenge, se
   if (screen === 'stat_selection') return (
     <div className="page">
       <BattleBar round={round} score={score} opponent={opponentName} />
-      <div style={{ color: 'var(--muted)', fontSize: 13, marginBottom: 16, textAlign: 'center' }}>
+      <div style={{ color: 'var(--muted)', fontSize: 13, marginBottom: 12, textAlign: 'center' }}>
         Round {round} — choose your stat
       </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
         {['attack','defense','speed'].map(stat => (
           <button key={stat} onClick={() => chooseStat(stat)} style={{
-            background: 'var(--surface)', border: `2px solid ${STAT_COLOR[stat]}`,
-            borderRadius: 14, padding: '16px 20px', cursor: 'pointer', textAlign: 'left',
-            transition: 'transform 0.15s, background 0.15s',
+            flex: 1, background: 'var(--surface)', border: `2px solid ${STAT_COLOR[stat]}`,
+            borderRadius: 14, padding: '12px 8px', cursor: 'pointer', textAlign: 'center',
+            transition: 'transform 0.15s',
           }}>
-            <div style={{ fontSize: 18, fontWeight: 700, color: STAT_COLOR[stat] }}>{STAT_ICON[stat]} {STAT_LABEL[stat]}</div>
-            <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>opponent counters with {COUNTER_OF[stat]}</div>
+            <div style={{ fontSize: 20, marginBottom: 4 }}>{STAT_ICON[stat]}</div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: STAT_COLOR[stat] }}>{STAT_LABEL[stat]}</div>
+            <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 3 }}>counters: {COUNTER_OF[stat]}</div>
           </button>
         ))}
       </div>
+      <div style={{ color: 'var(--muted)', fontSize: 12, marginBottom: 8 }}>Your hand</div>
+      <HandGrid hand={hand} stat={null} disabled />
     </div>
   )
 
@@ -300,13 +303,13 @@ export default function Battle({ token, participants = [], incomingChallenge, se
       <div className="page">
         <BattleBar round={`${roundResult.round} Result`} score={roundResult.score} opponent={opponentName} />
 
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 14 }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16, marginBottom: 14, justifyContent: 'center' }}>
           {/* Your card */}
-          <div className="anim-slideL" style={{ flex: 1 }}>
+          <div className="anim-slideL" style={{ width: 160, flexShrink: 0 }}>
             <div style={{ fontSize: 11, color: 'var(--muted)', textAlign: 'center', marginBottom: 6 }}>You</div>
             <FutCard card={roundResult.your_card} highlight={won ? 'win' : lost ? 'lose' : undefined} />
             <div style={{ textAlign: 'center', marginTop: 6 }}>
-              <div style={{ fontSize: 22, fontWeight: 900, color: STAT_COLOR[roundResult.your_stat] }}>
+              <div style={{ fontSize: 20, fontWeight: 900, color: STAT_COLOR[roundResult.your_stat] }}>
                 {roundResult.your_card[roundResult.your_stat]}
               </div>
               <div style={{ fontSize: 11, color: 'var(--muted)' }}>{STAT_ICON[roundResult.your_stat]} {STAT_LABEL[roundResult.your_stat]}</div>
@@ -314,19 +317,19 @@ export default function Battle({ token, participants = [], incomingChallenge, se
           </div>
 
           {/* Middle */}
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', paddingTop: 40, gap: 6 }}>
-            <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--muted)' }}>VS</div>
-            <div style={{ fontSize: 13, fontWeight: 700, color: won ? 'var(--green)' : lost ? 'var(--red)' : 'var(--gold)', textAlign: 'center' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', paddingTop: 60, gap: 6, flexShrink: 0 }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--muted)' }}>VS</div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: won ? 'var(--green)' : lost ? 'var(--red)' : 'var(--gold)', textAlign: 'center' }}>
               {won ? '🏆 Win' : lost ? '💀 Loss' : '🤝 Draw'}
             </div>
           </div>
 
           {/* Opponent card */}
-          <div className="anim-slideR" style={{ flex: 1 }}>
+          <div className="anim-slideR" style={{ width: 160, flexShrink: 0 }}>
             <div style={{ fontSize: 11, color: 'var(--muted)', textAlign: 'center', marginBottom: 6 }}>{opponentName}</div>
             <FutCard card={roundResult.opponent_card} highlight={lost ? 'win' : won ? 'lose' : undefined} />
             <div style={{ textAlign: 'center', marginTop: 6 }}>
-              <div style={{ fontSize: 22, fontWeight: 900, color: STAT_COLOR[roundResult.opponent_stat] }}>
+              <div style={{ fontSize: 20, fontWeight: 900, color: STAT_COLOR[roundResult.opponent_stat] }}>
                 {roundResult.opponent_card[roundResult.opponent_stat]}
               </div>
               <div style={{ fontSize: 11, color: 'var(--muted)' }}>{STAT_ICON[roundResult.opponent_stat]} {STAT_LABEL[roundResult.opponent_stat]}</div>

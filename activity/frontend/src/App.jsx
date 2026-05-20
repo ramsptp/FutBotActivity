@@ -78,8 +78,13 @@ function App() {
   const token = auth.access_token
   const user = auth.user
 
+  const withBg = page !== 'battle' && page !== 'home'
+
   return (
-    <>
+    <div style={withBg ? {
+      minHeight: '100svh',
+      background: "url('/background.png') center center / cover no-repeat fixed",
+    } : undefined}>
       {page === 'home' && <Home token={token} user={user} setPage={setPage} />}
       {page === 'collection' && <Collection token={token} />}
       {page === 'decks' && <DeckBuilder token={token} />}
@@ -94,7 +99,7 @@ function App() {
         />
       )}
       {page !== 'home' && <Nav page={page} setPage={setPage} />}
-    </>
+    </div>
   )
 }
 
