@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { DiscordSDK } from '@discord/embedded-app-sdk'
 
 const discordSdk = new DiscordSDK(import.meta.env.VITE_CLIENT_ID)
@@ -6,8 +6,11 @@ const discordSdk = new DiscordSDK(import.meta.env.VITE_CLIENT_ID)
 function App() {
   const [auth, setAuth] = useState(null)
   const [error, setError] = useState(null)
+  const authing = useRef(false)
 
   useEffect(() => {
+    if (authing.current) return
+    authing.current = true
     setup()
   }, [])
 
