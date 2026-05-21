@@ -7,7 +7,7 @@ const STAT_ICON  = { attack: '⚔️', defense: '🛡️', speed: '💨' }
 const STAT_COLOR = { attack: '#ef4444', defense: '#3b82f6', speed: '#22c55e' }
 const COUNTER_OF = { attack: 'Defense', defense: 'Attack', speed: 'Speed' }
 
-export default function Battle({ token, participants = [], incomingChallenge, setIncomingChallenge, initialMode = 'match' }) {
+export default function Battle({ token, participants = [], incomingChallenge, setIncomingChallenge, initialMode = 'match', autoChallenge = null, setAutoChallenge }) {
   const [screen, setScreen]   = useState('lobby')
   const [decks, setDecks]     = useState([])
   const [selectedDeck, setSelectedDeck] = useState('')
@@ -34,6 +34,8 @@ export default function Battle({ token, participants = [], incomingChallenge, se
   const [roundResult, setRoundResult] = useState(null)
   const [gameResult, setGameResult]   = useState(null)
   const [showVS, setShowVS]   = useState(false)
+  const [opponentDeckReady, setOpponentDeckReady] = useState(false)
+  const [opponentNameForDeck, setOpponentNameForDeck] = useState('')
 
   const wsRef = useRef(null)
 
@@ -44,7 +46,7 @@ export default function Battle({ token, participants = [], incomingChallenge, se
 
   function connectWs(id) {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const url = `${protocol}//${window.location.host}/ws/battle/${id}?token=${encodeURIComponent(token)}&deck_name=${encodeURIComponent(selectedDeck)}`
+    const url = `${protocol}//${window.location.host}/ws/battle/${id}?token=${encodeURIComponent(token)}`
     const ws = new WebSocket(url)
     wsRef.current = ws
 
@@ -53,6 +55,17 @@ export default function Battle({ token, participants = [], incomingChallenge, se
       switch (msg.type) {
         case 'waiting':
           setRoomId(msg.room_id); setScreen('waiting'); break
+
+        case 'select_deck':
+          setOpponentNameForDeck(msg.opponent_name)
+          setOpponentDeckReady(false)
+          setSelectedDeck('')
+          setScreen('deck_selection')
+          break
+
+        case 'opponent_deck_ready':
+          setOpponentDeckReady(true)
+          break
 
         case 'round_start':
           preloadImages(msg.your_hand.map(c => c.image_url))
@@ -109,29 +122,33 @@ export default function Battle({ token, participants = [], incomingChallenge, se
   function generateId() { return Math.random().toString(36).substring(2, 8).toUpperCase() }
 
   function createRoom() {
-    if (!selectedDeck) return setError('Select a deck first')
     setError(null)
     const id = generateId(); setRoomId(id); connectWs(id)
   }
 
   function joinRoom() {
-    if (!selectedDeck) return setError('Select a deck first')
     if (!joinCode.trim()) return setError('Enter a room code')
     setError(null); connectWs(joinCode.trim().toUpperCase())
   }
 
   async function challengePlayer(toUserId) {
-    if (!selectedDeck) return setError('Select a deck first')
     setError(null)
     const id = generateId()
-    await apiFetch('/api/challenges', token, { method: 'POST', body: JSON.stringify({ to_user_id: toUserId, room_id: id, deck_name: selectedDeck }) })
+    await apiFetch('/api/challenges', token, { method: 'POST', body: JSON.stringify({ to_user_id: toUserId, room_id: id }) })
     setRoomId(id); connectWs(id)
   }
 
-  async function acceptChallenge() {
+  function sendReady() {
     if (!selectedDeck) return setError('Select a deck first')
+    setError(null)
+    wsRef.current?.send(JSON.stringify({ type: 'ready', deck_name: selectedDeck }))
+    setScreen('deck_ready_waiting')
+  }
+
+  async function acceptChallenge() {
     const c = incomingChallenge
     setIncomingChallenge(null)
+    setShowAcceptScreen(false)
     await apiFetch('/api/challenges/decline?silent=true', token, { method: 'DELETE' })
     connectWs(c.room_id)
   }
@@ -168,7 +185,7 @@ export default function Battle({ token, participants = [], incomingChallenge, se
     setRematchRequested(false); setOpponentRequestedRematch(false); setError(null)
   }
 
-  /* ── VS SPLASH ── */
+  /* ── VS SPLASH — must be first so it overlays any screen ── */
   if (showVS) return (
     <div style={{ position: 'fixed', inset: 0, background: 'linear-gradient(135deg,#0a0e1a,#1a0a2e)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', zIndex: 200 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
@@ -181,6 +198,47 @@ export default function Battle({ token, participants = [], incomingChallenge, se
         </div>
       </div>
       <div className="anim-fadeUp" style={{ marginTop: 20, color: 'var(--muted)', fontSize: 14, letterSpacing: 2, animationDelay: '0.4s' }}>BATTLE BEGINS</div>
+    </div>
+  )
+
+  /* ── IN-ARENA DECK SELECTION ── */
+  if (screen === 'deck_selection') return (
+    <div style={L.root}>
+      <style>{`.deck-select option{background:#0d1117}`}</style>
+      <div style={L.vignette} />
+      <div style={L.diagLine} />
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', maxWidth: 420, margin: '0 auto', width: '100%', gap: 20 }}>
+        <div>
+          <div style={{ fontSize: 11, fontFamily: MONTSERRAT, fontWeight: 700, color: '#ffca45', letterSpacing: '0.25em', marginBottom: 6 }}>VS {opponentNameForDeck.toUpperCase()}</div>
+          <div style={{ fontSize: 28, fontFamily: MONTSERRAT, fontWeight: 900, color: '#fff', textTransform: 'uppercase' }}>Select Your Squad</div>
+          <div style={{ marginTop: 8, height: 2, width: 50, background: 'linear-gradient(to right, #ffca45, transparent)' }} />
+        </div>
+        {opponentDeckReady && (
+          <div style={{ background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.3)', borderRadius: 10, padding: '10px 14px', fontSize: 13, color: '#4ade80', fontWeight: 600 }}>
+            ✓ {opponentNameForDeck} is ready — pick your deck!
+          </div>
+        )}
+        <div>
+          <div style={L.deckLabel}>CHOOSE YOUR LINEUP</div>
+          <select value={selectedDeck} onChange={e => setSelectedDeck(e.target.value)} className="deck-select" style={L.deckSelect}>
+            <option value="">— select a deck —</option>
+            {decks.map(d => <option key={d.deck_name} value={d.deck_name}>{d.deck_name}</option>)}
+          </select>
+        </div>
+        {error && <div style={L.error}>{error}</div>}
+        <button onClick={sendReady} style={L.goldBtn}>⚔ READY FOR BATTLE</button>
+      </div>
+    </div>
+  )
+
+  /* ── WAITING FOR OPPONENT DECK ── */
+  if (screen === 'deck_ready_waiting') return (
+    <div style={{ ...L.root, justifyContent: 'center', alignItems: 'center', gap: 20, textAlign: 'center' }}>
+      <div style={L.vignette} />
+      <div style={{ fontSize: 11, fontFamily: MONTSERRAT, fontWeight: 700, color: '#ffca45', letterSpacing: '0.25em' }}>READY</div>
+      <div style={{ fontSize: 24, fontFamily: MONTSERRAT, fontWeight: 900, color: '#fff' }}>Waiting for {opponentNameForDeck}…</div>
+      <div style={{ width: 48, height: 48, borderRadius: '50%', border: '3px solid rgba(240,192,64,0.2)', borderTop: '3px solid #ffca45', animation: 'spin 0.9s linear infinite' }} />
+      <style>{`@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}`}</style>
     </div>
   )
 
@@ -201,23 +259,12 @@ export default function Battle({ token, participants = [], incomingChallenge, se
 
         <div style={{ width: '100%', height: 1, background: 'linear-gradient(to right, transparent, rgba(255,202,69,0.3), transparent)' }} />
 
-        {/* Deck selector */}
-        <div style={{ width: '100%' }}>
-          <div style={L.deckLabel}>SELECT YOUR DECK</div>
-          <select value={selectedDeck} onChange={e => setSelectedDeck(e.target.value)} className="deck-select" style={L.deckSelect}>
-            <option value="">— choose your lineup —</option>
-            {decks.map(d => <option key={d.deck_name} value={d.deck_name}>{d.deck_name}</option>)}
-          </select>
-        </div>
-
-        {error && <div style={L.error}>{error}</div>}
-
         <button
           onClick={async () => {
-            if (!selectedDeck) return setError('Select a deck first')
             setError(null)
             const c = incomingChallenge
             setIncomingChallenge(null)
+            setShowAcceptScreen(false)
             await apiFetch('/api/challenges/decline?silent=true', token, { method: 'DELETE' })
             connectWs(c.room_id)
           }}
@@ -284,24 +331,22 @@ export default function Battle({ token, participants = [], incomingChallenge, se
         <div style={L.headerLine} />
       </div>
 
-      {/* Deck selector */}
-      <div style={L.deckWrap}>
-        <div style={L.deckLabel}>SELECT DECK</div>
-        <select
-          value={selectedDeck}
-          onChange={e => setSelectedDeck(e.target.value)}
-          className="deck-select"
-          style={L.deckSelect}
-        >
-          <option value="">— choose your lineup —</option>
-          {decks.map(d => <option key={d.deck_name} value={d.deck_name}>{d.deck_name}</option>)}
-        </select>
-      </div>
-
       {error && <div style={L.error}>{error}</div>}
 
       {initialMode === 'match' ? (
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+          {/* Auto-challenge target from online panel */}
+          {autoChallenge && (
+            <div style={{ background: 'rgba(240,192,64,0.08)', border: '1px solid rgba(240,192,64,0.3)', borderRadius: 12, padding: '12px 14px', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 12 }}>
+              <div style={{ fontSize: 11, color: '#ffca45', fontWeight: 700, letterSpacing: '0.15em', flex: 1 }}>
+                CHALLENGING — {autoChallenge.name}
+              </div>
+              <button onClick={() => { challengePlayer(autoChallenge.user_id); setAutoChallenge?.(null) }} style={{ ...L.challengeBtn, padding: '8px 16px', fontSize: 13 }}>
+                ⚔ SEND CHALLENGE
+              </button>
+              <button onClick={() => setAutoChallenge?.(null)} style={{ background: 'transparent', border: 'none', color: '#475569', cursor: 'pointer', fontSize: 16, padding: 0 }}>✕</button>
+            </div>
+          )}
           {participants.length > 0 ? (
             <>
               <div style={L.sectionLabel}>OPPONENTS IN SESSION</div>

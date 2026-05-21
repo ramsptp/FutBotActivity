@@ -1,3 +1,7 @@
+import { useState } from 'react'
+import { apiFetch } from '../lib/api'
+import OnlinePanel from './OnlinePanel'
+
 const TABS = [
   { id: 'home',       icon: 'home',          label: 'Home' },
   { id: 'collection', icon: 'style',          label: 'Collection' },
@@ -7,7 +11,15 @@ const TABS = [
   { id: 'battle',     icon: 'swords',         label: 'Battle' },
 ]
 
-export default function Nav({ page, setPage, participants = [], user }) {
+export default function Nav({ page, setPage, participants = [], user, token, setBattleMode, setAutoChallenge }) {
+  const [showPanel, setShowPanel] = useState(false)
+
+  function handleChallenge(participant) {
+    setAutoChallenge?.(participant)
+    setBattleMode?.('match')
+    setPage('battle')
+  }
+
   return (
     <nav style={s.nav}>
       <div style={s.inner}>
@@ -29,30 +41,41 @@ export default function Nav({ page, setPage, participants = [], user }) {
           })}
         </div>
 
-        {/* Online indicator */}
-        <div style={s.online}>
-          {user && (
-            <div style={{ display: 'flex', marginRight: 2 }}>
-              <img
-                src={`https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png?size=32`}
-                style={{ width: 22, height: 22, borderRadius: '50%', border: '2px solid #050914', objectFit: 'cover', marginRight: -6, zIndex: 2 }}
-                onError={e => { e.target.src = 'https://cdn.discordapp.com/embed/avatars/0.png' }}
-              />
-              {participants.slice(0, 3).map((p, i) => (
+        {/* Online indicator — clickable */}
+        <div style={{ position: 'absolute', right: 0, zIndex: 1 }}>
+          <div style={{ ...s.online, position: 'static', cursor: 'pointer' }} onClick={() => setShowPanel(p => !p)}>
+            {user && (
+              <div style={{ display: 'flex', marginRight: 2 }}>
                 <img
-                  key={p.user_id}
-                  src={p.avatar
-                    ? `https://cdn.discordapp.com/avatars/${p.user_id}/${p.avatar}.png?size=32`
-                    : `https://cdn.discordapp.com/embed/avatars/${Number(p.user_id) % 5}.png`}
-                  style={{ width: 22, height: 22, borderRadius: '50%', border: '2px solid #050914', objectFit: 'cover', marginRight: -6, zIndex: 1 - i }}
-                  onError={e => { e.target.src = 'https://cdn.discordapp.com/embed/avatars/1.png' }}
+                  src={`https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png?size=32`}
+                  style={{ width: 22, height: 22, borderRadius: '50%', border: '2px solid #050914', objectFit: 'cover', marginRight: -6, zIndex: 2 }}
+                  onError={e => { e.target.src = 'https://cdn.discordapp.com/embed/avatars/0.png' }}
                 />
-              ))}
-            </div>
+                {participants.slice(0, 3).map((p, i) => (
+                  <img
+                    key={p.user_id}
+                    src={p.avatar
+                      ? `https://cdn.discordapp.com/avatars/${p.user_id}/${p.avatar}.png?size=32`
+                      : `https://cdn.discordapp.com/embed/avatars/${Number(p.user_id) % 5}.png`}
+                    style={{ width: 22, height: 22, borderRadius: '50%', border: '2px solid #050914', objectFit: 'cover', marginRight: -6, zIndex: 1 - i }}
+                    onError={e => { e.target.src = 'https://cdn.discordapp.com/embed/avatars/1.png' }}
+                  />
+                ))}
+              </div>
+            )}
+            <span style={s.onlineDot} />
+            <span style={{ fontSize: 12, color: '#fff', fontWeight: 700 }}>{participants.length + 1}</span>
+            <span style={s.onlineText}>Online</span>
+          </div>
+
+          {showPanel && user && (
+            <OnlinePanel
+              user={user}
+              participants={participants}
+              onChallenge={handleChallenge}
+              onClose={() => setShowPanel(false)}
+            />
           )}
-          <span style={s.onlineDot} />
-          <span style={{ fontSize: 12, color: '#fff', fontWeight: 700 }}>{participants.length + 1}</span>
-          <span style={s.onlineText}>Online</span>
         </div>
       </div>
     </nav>
@@ -96,6 +119,7 @@ const s = {
     background: 'rgba(15,23,42,0.6)', backdropFilter: 'blur(8px)',
     borderRadius: 20, padding: '4px 12px',
     border: '1px solid rgba(255,255,255,0.1)',
+    userSelect: 'none',
   },
   onlineDot: {
     width: 7, height: 7, borderRadius: '50%',

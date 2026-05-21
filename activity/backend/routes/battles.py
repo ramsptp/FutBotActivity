@@ -30,7 +30,6 @@ class LobbyRegister(BaseModel):
 class ChallengeBody(BaseModel):
     to_user_id: str
     room_id: str
-    deck_name: str
 
 @router.post("/api/lobby/register")
 async def register_lobby(body: LobbyRegister, discord_user=Depends(get_current_user)):
@@ -61,7 +60,6 @@ async def send_challenge(body: ChallengeBody, discord_user=Depends(get_current_u
         "from_user_id": from_id,
         "from_name": discord_user["username"],
         "room_id": body.room_id,
-        "deck_name": body.deck_name,
         "expires_at": time.time() + CHALLENGE_TTL,
     }
     return {"ok": True}
@@ -285,12 +283,21 @@ async def end_game(room):
         })
 
 
+async def send_select_deck(room):
+    player_ids = list(room["players"].keys())
+    for pid in player_ids:
+        opp_id = next(x for x in player_ids if x != pid)
+        await send_to(room["players"][pid], {
+            "type": "select_deck",
+            "opponent_name": room["players"][opp_id]["name"],
+        })
+
+
 @router.websocket("/ws/battle/{room_id}")
 async def battle_ws(
     websocket: WebSocket,
     room_id: str,
     token: str = Query(...),
-    deck_name: str = Query(...),
 ):
     await websocket.accept()
 
@@ -302,14 +309,6 @@ async def battle_ws(
 
     user_id = discord_user["id"]
     username = discord_user["username"]
-
-    from db import get_db
-    db = get_db()
-    hand = load_deck(db, int(user_id), deck_name)
-    if not hand:
-        await websocket.send_text(json.dumps({"type": "error", "message": "Deck not found"}))
-        await websocket.close()
-        return
 
     if room_id not in rooms:
         rooms[room_id] = {
@@ -331,18 +330,39 @@ async def battle_ws(
         await websocket.close()
         return
 
-    room["players"][user_id] = {"ws": websocket, "name": username, "hand": hand, "deck_name": deck_name}
+    room["players"][user_id] = {"ws": websocket, "name": username, "hand": None, "deck_name": None}
     room["score"][user_id] = 0
 
     if len(room["players"]) == 1:
         await send_to(room["players"][user_id], {"type": "waiting", "room_id": room_id})
     else:
-        await start_round(room)
+        room["state"] = "selecting_decks"
+        await send_select_deck(room)
 
     try:
         while True:
             data = await websocket.receive_text()
             msg = json.loads(data)
+
+            # Deck selection in arena
+            if msg.get("type") == "ready" and room["state"] == "selecting_decks":
+                from db import get_db
+                db = get_db()
+                dn = msg.get("deck_name")
+                hand = load_deck(db, int(user_id), dn)
+                if not hand:
+                    await send_to(room["players"][user_id], {"type": "error", "message": "Deck not found"})
+                    continue
+                room["players"][user_id]["hand"] = hand
+                room["players"][user_id]["deck_name"] = dn
+                player_ids = list(room["players"].keys())
+                opp_id = next(pid for pid in player_ids if pid != user_id)
+                await send_to(room["players"][opp_id], {"type": "opponent_deck_ready"})
+                if all(room["players"][pid].get("hand") for pid in player_ids):
+                    room["round"] = 1
+                    room["score"] = {pid: 0 for pid in player_ids}
+                    await start_round(room)
+                continue
 
             # Host picks the stat for the round
             if msg.get("type") == "pick_stat" and room["state"] == "stat_selection" and user_id == room["stat_picker_id"]:
@@ -401,19 +421,15 @@ async def battle_ws(
                 await send_to(room["players"][opp_id], {"type": "rematch_requested"})
 
                 if len(room["rematch_requests"]) == 2:
-                    # Reload decks and reset room
-                    from db import get_db
-                    db = get_db()
                     for pid in player_ids:
-                        fresh_hand = load_deck(db, int(pid), room["players"][pid]["deck_name"])
-                        room["players"][pid]["hand"] = fresh_hand or []
+                        room["players"][pid]["hand"] = None
                     room["round"] = 1
                     room["score"] = {pid: 0 for pid in player_ids}
-                    room["state"] = "stat_selection"
+                    room["state"] = "selecting_decks"
                     room["rematch_requests"] = set()
                     room["picks"] = {}
                     room["chosen_stat"] = None
-                    asyncio.create_task(start_round(room))
+                    asyncio.create_task(send_select_deck(room))
 
     except WebSocketDisconnect:
         room["players"].pop(user_id, None)

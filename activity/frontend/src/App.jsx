@@ -16,6 +16,7 @@ function App() {
   const [error, setError] = useState(null)
   const [page, setPage] = useState('home')
   const [battleMode, setBattleMode] = useState('match') // 'match' | 'friend'
+  const [autoChallenge, setAutoChallenge] = useState(null) // participant to auto-challenge
   const [participants, setParticipants] = useState([])
   const [incomingChallenge, setIncomingChallenge] = useState(null)
   const authing = useRef(false)
@@ -100,9 +101,11 @@ function App() {
           incomingChallenge={incomingChallenge}
           setIncomingChallenge={setIncomingChallenge}
           initialMode={battleMode}
+          autoChallenge={autoChallenge}
+          setAutoChallenge={setAutoChallenge}
         />
       )}
-      {page !== 'home' && <Nav page={page} setPage={setPage} participants={participants} user={user} />}
+      {page !== 'home' && <Nav page={page} setPage={setPage} participants={participants} user={user} token={token} setBattleMode={setBattleMode} setAutoChallenge={setAutoChallenge} />}
 
       {/* Global challenge notification — shows on any page */}
       <ChallengeNotification

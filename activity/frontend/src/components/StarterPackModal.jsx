@@ -30,7 +30,7 @@ export default function StarterPackModal({ cards, onClose }) {
             </div>
           ))}
         </div>
-        <button style={s.btn} onClick={onClose}>Let's Go!</button>
+        <button style={s.btn} onClick={onClose}>Build Your First Deck →</button>
       </div>
     </div>
   )
