@@ -48,6 +48,7 @@ export default function Packs({ token, starterCards = null, onStarterDone = null
   const [shineActive, setShineActive] = useState(false)
   const [flippedCards, setFlippedCards] = useState([])
   const [lastFlipped, setLastFlipped]   = useState(null)
+  const [statStep, setStatStep]   = useState(0)
   const [loading, setLoading]     = useState(false)
   const [error, setError]         = useState(null)
 
@@ -72,12 +73,18 @@ export default function Packs({ token, starterCards = null, onStarterDone = null
     setPhase('shake')
     setFlipped(false)
     setShineActive(false)
-    const t1 = setTimeout(() => setPhase('flash'), 900)     // shake ends → rarity flash
-    const t2 = setTimeout(() => setPhase('reveal'), 1200)   // flash done → reveal card back
-    const t3 = setTimeout(() => setFlipped(true), 2200)     // pause on back before flip
-    const t4 = setTimeout(() => setShineActive(true), 2850)
-    const t5 = setTimeout(() => setShineActive(false), 3550)
-    return () => [t1,t2,t3,t4,t5].forEach(clearTimeout)
+    setStatStep(0)
+    const t1 = setTimeout(() => setPhase('flash'), 900)
+    const t2 = setTimeout(() => setPhase('stats'), 1200)
+    const t3 = setTimeout(() => setStatStep(1), 1800)   // rarity + type
+    const t4 = setTimeout(() => setStatStep(2), 2700)   // ATK
+    const t5 = setTimeout(() => setStatStep(3), 3500)   // DEF
+    const t6 = setTimeout(() => setStatStep(4), 4300)   // SPD
+    const t7 = setTimeout(() => setStatStep(5), 5300)   // OVR big reveal
+    const t8 = setTimeout(() => setFlipped(true), 6400) // card flips
+    const t9 = setTimeout(() => setShineActive(true), 7000)
+    const t10 = setTimeout(() => setShineActive(false), 7700)
+    return () => [t1,t2,t3,t4,t5,t6,t7,t8,t9,t10].forEach(clearTimeout)
   }, [screen, revealIndex])
 
   async function fetchPacks() {
@@ -284,6 +291,20 @@ export default function Packs({ token, starterCards = null, onStarterDone = null
             0%,100% { box-shadow: 0 0 20px rgba(${rgbBase},0.4); }
             50%      { box-shadow: 0 0 50px rgba(${rgbBase},0.9), 0 0 80px rgba(${rgbBase},0.3); }
           }
+          @keyframes statIn {
+            0%   { transform: scale(0.4) translateY(16px); opacity: 0; filter: brightness(5); }
+            60%  { filter: brightness(1.6); }
+            100% { transform: scale(1) translateY(0); opacity: 1; filter: brightness(1); }
+          }
+          @keyframes ovrIn {
+            0%   { transform: scale(0.15); opacity: 0; filter: brightness(10) blur(8px); }
+            50%  { filter: brightness(3) blur(0px); }
+            100% { transform: scale(1); opacity: 1; filter: brightness(1); }
+          }
+          @keyframes ovrGlow {
+            0%,100% { text-shadow: 0 0 20px rgba(240,192,64,0.6); }
+            50%      { text-shadow: 0 0 50px rgba(240,192,64,1), 0 0 80px rgba(240,192,64,0.5); }
+          }
         `}</style>
 
         {/* Rarity flash overlay */}
@@ -306,42 +327,77 @@ export default function Packs({ token, starterCards = null, onStarterDone = null
           </div>
         )}
 
-        {/* REVEAL PHASE — card with flip + glow + shine */}
-        {(phase === 'reveal' || phase === 'flash') && (
+        {/* STATS PHASE — EA FC style stat reveal then flip */}
+        {(phase === 'stats' || phase === 'flash') && (
           <>
-            <div style={{ width: 220, perspective: 900, animation: phase === 'reveal' ? 'cardEntrance 0.4s ease both' : 'none' }}>
+            {/* Atmospheric rarity radial glow */}
+            {phase === 'stats' && !flipped && (
+              <div style={{ position: 'fixed', inset: 0, background: `radial-gradient(ellipse at 50% 42%, ${flashColor.replace(/[\d.]+\)$/, '0.13)')}, transparent 65%)`, pointerEvents: 'none' }} />
+            )}
+
+            {/* Card */}
+            <div style={{ width: 220, perspective: 900, animation: phase === 'stats' ? 'cardEntrance 0.4s ease both' : 'none' }}>
               <div style={{
                 width: '100%', transformStyle: 'preserve-3d', position: 'relative',
-                transition: 'transform 0.55s cubic-bezier(0.4,0,0.2,1)',
+                transition: 'transform 0.6s cubic-bezier(0.4,0,0.2,1)',
                 transform: flipped ? 'rotateY(0deg)' : 'rotateY(180deg)',
                 borderRadius: 10,
-                animation: !flipped && phase === 'reveal' ? 'backPulse 0.8s ease infinite' : 'none',
+                animation: !flipped && phase === 'stats' ? 'backPulse 0.8s ease infinite' : 'none',
               }}>
                 {/* Card front */}
                 <div style={{ backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden', borderRadius: 10, overflow: 'hidden', position: 'relative', filter: flipped ? dropShadow : 'none', transition: 'filter 0.4s ease' }}>
                   <FutCard card={card} />
-                  {/* Shine sweep */}
                   {shineActive && (
-                    <div style={{
-                      position: 'absolute', top: 0, bottom: 0, width: '45%',
-                      background: 'linear-gradient(to right, transparent, rgba(255,255,255,0.55), transparent)',
-                      transform: 'skewX(-12deg)', animation: 'shineSweep 0.65s ease forwards',
-                      pointerEvents: 'none',
-                    }} />
+                    <div style={{ position: 'absolute', top: 0, bottom: 0, width: '45%', background: 'linear-gradient(to right, transparent, rgba(255,255,255,0.55), transparent)', transform: 'skewX(-12deg)', animation: 'shineSweep 0.65s ease forwards', pointerEvents: 'none' }} />
                   )}
                 </div>
                 {/* Card back */}
-                <div style={{
-                  position: 'absolute', inset: 0, backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden',
-                  transform: 'rotateY(180deg)', background: 'linear-gradient(135deg,#1e3a5f,#0f1f3d)',
-                  borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                }}>
+                <div style={{ position: 'absolute', inset: 0, backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden', transform: 'rotateY(180deg)', background: 'linear-gradient(135deg,#1e3a5f,#0f1f3d)', borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   <span style={{ fontSize: 40 }}>⚽</span>
                 </div>
               </div>
             </div>
 
-            {/* Card info */}
+            {/* Stat reveals (face-down phase) */}
+            {!flipped && statStep > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 18 }}>
+                {statStep >= 1 && (
+                  <div style={{ textAlign: 'center', animation: 'statIn 0.4s cubic-bezier(0.34,1.56,0.64,1) both' }}>
+                    <div style={{ fontSize: 13, fontWeight: 800, letterSpacing: 4, color: { Common:'#94a3b8', Uncommon:'#22c55e', Rare:'#f0c040' }[card.card_rarity] || '#fff', textTransform: 'uppercase', filter: 'drop-shadow(0 0 8px currentColor)' }}>
+                      {card.card_rarity} &nbsp;·&nbsp; {card.card_type}
+                    </div>
+                  </div>
+                )}
+                <div style={{ display: 'flex', gap: 36, alignItems: 'flex-end' }}>
+                  {statStep >= 2 && (
+                    <div style={{ textAlign: 'center', animation: 'statIn 0.4s cubic-bezier(0.34,1.56,0.64,1) both' }}>
+                      <div style={{ fontSize: 40, fontWeight: 900, color: '#ef4444', lineHeight: 1, filter: 'drop-shadow(0 0 10px rgba(239,68,68,0.7))' }}>{card.attack}</div>
+                      <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', letterSpacing: 2, marginTop: 4 }}>ATK</div>
+                    </div>
+                  )}
+                  {statStep >= 3 && (
+                    <div style={{ textAlign: 'center', animation: 'statIn 0.4s cubic-bezier(0.34,1.56,0.64,1) both' }}>
+                      <div style={{ fontSize: 40, fontWeight: 900, color: '#3b82f6', lineHeight: 1, filter: 'drop-shadow(0 0 10px rgba(59,130,246,0.7))' }}>{card.defense}</div>
+                      <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', letterSpacing: 2, marginTop: 4 }}>DEF</div>
+                    </div>
+                  )}
+                  {statStep >= 4 && (
+                    <div style={{ textAlign: 'center', animation: 'statIn 0.4s cubic-bezier(0.34,1.56,0.64,1) both' }}>
+                      <div style={{ fontSize: 40, fontWeight: 900, color: '#22c55e', lineHeight: 1, filter: 'drop-shadow(0 0 10px rgba(34,197,94,0.7))' }}>{card.speed}</div>
+                      <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', letterSpacing: 2, marginTop: 4 }}>SPD</div>
+                    </div>
+                  )}
+                </div>
+                {statStep >= 5 && (
+                  <div style={{ textAlign: 'center', animation: 'ovrIn 0.55s cubic-bezier(0.34,1.56,0.64,1) both' }}>
+                    <div style={{ fontSize: 76, fontWeight: 900, color: '#f0c040', lineHeight: 1, animation: 'ovrGlow 1.2s ease infinite', letterSpacing: -2 }}>{card.overall}</div>
+                    <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', letterSpacing: 4, marginTop: 4 }}>OVERALL</div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Post-flip: name, rarity, stats row, button */}
             {flipped && (
               <div className="anim-fadeUp" style={{ textAlign: 'center' }}>
                 <div style={{ fontSize: 20, fontWeight: 700, color: '#fff' }}>{card.name}</div>
@@ -358,7 +414,6 @@ export default function Packs({ token, starterCards = null, onStarterDone = null
                 </div>
               </div>
             )}
-
             {flipped && (
               <button className="btn-primary anim-fadeUp" onClick={nextCard} style={{ maxWidth: 260 }}>
                 {revealIndex < revealedCards.length - 1 ? 'Next Card →' : 'See All'}
