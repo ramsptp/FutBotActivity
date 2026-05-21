@@ -387,8 +387,9 @@ async def resolve_draft_round(room):
 
     draft["host_hand"].append(host_card)
     draft["guest_hand"].append(guest_card)
-    draft["used_ids"].add(host_card["fantasy_card_id"])
-    draft["used_ids"].add(guest_card["fantasy_card_id"])
+    # Mark ALL 3 cards from this round as used so none reappear in future rounds
+    for c in draft["cards"]:
+        draft["used_ids"].add(c["fantasy_card_id"])
 
     for pid in player_ids:
         is_host = pid == host_id
@@ -400,7 +401,7 @@ async def resolve_draft_round(room):
             "your_deck_so_far": draft["host_hand"] if is_host else draft["guest_hand"],
         })
 
-    await asyncio.sleep(2.5)
+    await asyncio.sleep(5)
     draft["round"] += 1
     draft["resolved"] = False
     if draft["round"] > 5:
@@ -425,7 +426,7 @@ async def complete_draft(room):
             "your_cards": draft["host_hand"] if is_host else draft["guest_hand"],
             "opponent_cards": draft["guest_hand"] if is_host else draft["host_hand"],
         })
-    await asyncio.sleep(3.5)
+    await asyncio.sleep(6)
     room["round"] = 1
     room["score"] = {pid: 0 for pid in player_ids}
     await start_round(room)

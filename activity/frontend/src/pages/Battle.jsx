@@ -76,7 +76,7 @@ export default function Battle({ token, participants = [], incomingChallenge, se
           setDraftRound(msg.round); setDraftCards(msg.cards)
           setDraftClaimed({}); setDraftMyPick(null); setDraftResult(null)
           setDraftPhase('reveal'); setScreen('draft')
-          setTimeout(() => setDraftPhase('pick'), 3200)
+          setTimeout(() => setDraftPhase('pick'), 6500)
           break
 
         case 'draft_position_claimed':
@@ -184,19 +184,21 @@ export default function Battle({ token, participants = [], incomingChallenge, se
   }
 
   useEffect(() => {
-    if (screen !== 'draft' || draftPhase !== 'pick') return
-    setDraftTimer(20)
+    if (screen !== 'draft') return
     clearInterval(draftTimerRef.current)
-    let t = 20
+    const duration = draftPhase === 'reveal' ? 6 : 20
+    setDraftTimer(duration)
+    let t = duration
     draftTimerRef.current = setInterval(() => {
       t -= 1
       setDraftTimer(t)
       if (t <= 0) {
         clearInterval(draftTimerRef.current)
-        // Auto-pick a random unclaimed position
-        const unclaimed = [0, 1, 2].filter(p => !draftClaimed[p])
-        if (unclaimed.length > 0 && draftMyPick === null) {
-          draftPick(unclaimed[Math.floor(Math.random() * unclaimed.length)])
+        if (draftPhase === 'pick') {
+          const unclaimed = [0, 1, 2].filter(p => !draftClaimed[p])
+          if (unclaimed.length > 0 && draftMyPick === null) {
+            draftPick(unclaimed[Math.floor(Math.random() * unclaimed.length)])
+          }
         }
       }
     }, 1000)
@@ -260,50 +262,72 @@ export default function Battle({ token, participants = [], incomingChallenge, se
   const RARITY_COL = { Common: '#94a3b8', Uncommon: '#22c55e', Rare: '#f0c040' }
 
   if (screen === 'draft') {
-    const totalRounds = 5
-
     if (draftPhase === 'reveal' || draftPhase === 'pick') {
+      const maxTime = draftPhase === 'reveal' ? 6 : 20
       return (
-        <div style={{ position: 'fixed', inset: 0, background: '#050914', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 20, padding: '24px 16px' }}>
+        <div style={{ position: 'fixed', inset: 0, background: '#050914', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 18, padding: '24px 16px' }}>
+          <style>{`
+            @keyframes draftPulse {
+              0%,100% { box-shadow: 0 0 8px 2px rgba(168,85,247,0.4); }
+              50%      { box-shadow: 0 0 20px 4px rgba(168,85,247,0.8); }
+            }
+          `}</style>
+
+          {/* Header */}
           <div style={{ textAlign: 'center' }}>
             <div style={{ fontSize: 11, color: '#a855f7', fontWeight: 700, letterSpacing: 3, textTransform: 'uppercase' }}>Fantasy Draft</div>
-            <div style={{ fontSize: 20, fontWeight: 900, color: '#fff', fontFamily: "'Montserrat',sans-serif", marginTop: 4 }}>
-              Round {draftRound} / {totalRounds}
+            <div style={{ fontSize: 22, fontWeight: 900, color: '#fff', fontFamily: "'Montserrat',sans-serif", marginTop: 4 }}>
+              Round {draftRound} / 5
             </div>
-            <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)', marginTop: 4 }}>
-              {draftPhase === 'reveal' ? 'Memorise these cards!' : draftMyPick !== null ? 'Waiting for opponent…' : `Pick one · ${draftTimer}s`}
+            <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)', marginTop: 4 }}>
+              {draftPhase === 'reveal'
+                ? `Memorise these cards! · ${draftTimer}s`
+                : draftMyPick !== null ? 'Waiting for opponent…' : `Pick one · ${draftTimer}s`}
             </div>
           </div>
 
-          <div style={{ display: 'flex', gap: 16, justifyContent: 'center' }}>
+          {/* Timer bar */}
+          <div style={{ width: '100%', maxWidth: 420, height: 4, background: 'rgba(255,255,255,0.08)', borderRadius: 2 }}>
+            <div style={{ height: '100%', borderRadius: 2, transition: 'width 1s linear, background 0.3s',
+              background: draftTimer > maxTime * 0.6 ? '#a855f7' : draftTimer > maxTime * 0.25 ? '#f0c040' : '#ef4444',
+              width: `${(draftTimer / maxTime) * 100}%` }} />
+          </div>
+
+          {/* Cards */}
+          <div style={{ display: 'flex', gap: 14, justifyContent: 'center' }}>
             {draftCards.map((card, i) => {
               const claimed = draftClaimed[i]
               const isMine = claimed === 'you'
               const isOpp  = claimed === 'opponent'
               return (
-                <div key={i} onClick={() => draftPhase === 'pick' && draftPick(i)} style={{ width: 100, cursor: draftPhase === 'pick' && !claimed ? 'pointer' : 'default', opacity: isOpp ? 0.5 : 1, transition: 'transform 0.15s', transform: !claimed && draftPhase === 'pick' ? 'scale(1)' : 'scale(1)' }}>
+                <div key={i} onClick={() => draftPhase === 'pick' && !claimed && draftMyPick === null && draftPick(i)}
+                  style={{ width: 150, cursor: draftPhase === 'pick' && !claimed && draftMyPick === null ? 'pointer' : 'default', opacity: isOpp ? 0.45 : 1, transition: 'opacity 0.3s, transform 0.15s', transform: !claimed && draftPhase === 'pick' && draftMyPick === null ? 'scale(1.02)' : 'scale(1)' }}>
                   {draftPhase === 'reveal' ? (
                     <>
-                      <div style={{ borderRadius: 10, overflow: 'hidden', border: '2px solid rgba(168,85,247,0.3)' }}>
+                      <div style={{ borderRadius: 12, overflow: 'hidden', border: '2px solid rgba(168,85,247,0.4)', boxShadow: '0 0 12px rgba(168,85,247,0.25)' }}>
                         {card.image_url
                           ? <img src={card.image_url} alt={card.name} style={{ width: '100%', display: 'block' }} />
-                          : <div style={{ width: '100%', paddingBottom: '140%', background: '#1a2236', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
-                              <span style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', fontSize: 28 }}>⚽</span>
+                          : <div style={{ width: '100%', paddingBottom: '140%', background: '#1a2236', position: 'relative' }}>
+                              <span style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', fontSize: 32 }}>⚽</span>
                             </div>
                         }
                       </div>
-                      <div style={{ textAlign: 'center', marginTop: 5 }}>
-                        <div style={{ fontSize: 11, fontWeight: 700, color: '#fff' }}>{card.name}</div>
-                        <div style={{ fontSize: 10, color: RARITY_COL[card.card_rarity] || '#fff' }}>{card.overall} OVR</div>
+                      <div style={{ textAlign: 'center', marginTop: 6 }}>
+                        <div style={{ fontSize: 12, fontWeight: 700, color: '#fff' }}>{card.name}</div>
+                        <div style={{ fontSize: 11, color: RARITY_COL[card.card_rarity] || '#fff' }}>{card.overall} OVR</div>
                       </div>
                     </>
                   ) : (
                     <>
-                      <div style={{ borderRadius: 10, overflow: 'hidden', background: 'linear-gradient(135deg,#1e3a5f,#0f1f3d)', aspectRatio: '300/420', display: 'flex', alignItems: 'center', justifyContent: 'center', border: `2px solid ${isMine ? '#22c55e' : isOpp ? '#ef4444' : 'rgba(168,85,247,0.5)'}`, boxShadow: isMine ? '0 0 16px rgba(34,197,94,0.5)' : isOpp ? '0 0 16px rgba(239,68,68,0.4)' : 'none', animation: !claimed && draftPhase === 'pick' ? 'tutorialRing 1.4s ease infinite' : 'none' }}>
-                        {isMine ? <span style={{ fontSize: 28 }}>✓</span> : isOpp ? <span style={{ fontSize: 22 }}>✕</span> : <span style={{ fontSize: 36 }}>⚽</span>}
+                      <div style={{ borderRadius: 12, overflow: 'hidden', background: 'linear-gradient(135deg,#1e3a5f,#0f1f3d)', aspectRatio: '300/420', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        border: `2px solid ${isMine ? '#22c55e' : isOpp ? '#ef4444' : 'rgba(168,85,247,0.5)'}`,
+                        boxShadow: isMine ? '0 0 20px rgba(34,197,94,0.5)' : isOpp ? '0 0 16px rgba(239,68,68,0.35)' : 'none',
+                        animation: !claimed && draftMyPick === null ? 'draftPulse 1.6s ease infinite' : 'none',
+                      }}>
+                        {isMine ? <span style={{ fontSize: 40 }}>✓</span> : isOpp ? <span style={{ fontSize: 36 }}>✕</span> : <span style={{ fontSize: 44 }}>⚽</span>}
                       </div>
-                      <div style={{ textAlign: 'center', marginTop: 5, fontSize: 11, fontWeight: 700, color: isMine ? '#22c55e' : isOpp ? '#ef4444' : 'rgba(255,255,255,0.4)' }}>
-                        {isMine ? 'Yours' : isOpp ? 'Taken' : `Card ${i + 1}`}
+                      <div style={{ textAlign: 'center', marginTop: 6, fontSize: 12, fontWeight: 700, color: isMine ? '#22c55e' : isOpp ? '#ef4444' : 'rgba(255,255,255,0.45)' }}>
+                        {isMine ? '✓ Yours' : isOpp ? 'Taken' : `Card ${i + 1}`}
                       </div>
                     </>
                   )}
@@ -312,20 +336,13 @@ export default function Battle({ token, participants = [], incomingChallenge, se
             })}
           </div>
 
-          {/* Timer bar */}
-          {draftPhase === 'pick' && draftMyPick === null && (
-            <div style={{ width: '100%', maxWidth: 340, height: 4, background: 'rgba(255,255,255,0.1)', borderRadius: 2 }}>
-              <div style={{ height: '100%', background: draftTimer > 10 ? '#a855f7' : draftTimer > 5 ? '#f0c040' : '#ef4444', borderRadius: 2, width: `${(draftTimer / 20) * 100}%`, transition: 'width 1s linear, background 0.3s' }} />
-            </div>
-          )}
-
           {/* Accumulated deck */}
           {draftMyDeck.length > 0 && (
             <div style={{ textAlign: 'center' }}>
               <div style={{ fontSize: 10, color: '#475569', letterSpacing: 2, marginBottom: 6 }}>YOUR PICKS SO FAR</div>
               <div style={{ display: 'flex', gap: 6, justifyContent: 'center' }}>
                 {draftMyDeck.map((c, i) => (
-                  <div key={i} style={{ width: 40, borderRadius: 6, overflow: 'hidden' }}>
+                  <div key={i} style={{ width: 44, borderRadius: 6, overflow: 'hidden' }}>
                     {c.image_url ? <img src={c.image_url} style={{ width: '100%', display: 'block' }} /> : <div style={{ width: '100%', paddingBottom: '140%', background: '#1a2236' }} />}
                   </div>
                 ))}
@@ -337,23 +354,29 @@ export default function Battle({ token, participants = [], incomingChallenge, se
     }
 
     if (draftPhase === 'result' && draftResult) {
+      const card = draftResult.your_card
       return (
         <div style={{ position: 'fixed', inset: 0, background: '#050914', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 20, padding: '24px 16px' }}>
-          <div style={{ fontSize: 11, color: '#a855f7', fontWeight: 700, letterSpacing: 3, textTransform: 'uppercase' }}>Round {draftResult.round} Result</div>
-          <div style={{ display: 'flex', gap: 32, alignItems: 'flex-start' }}>
-            {[['You got', draftResult.your_card, '#22c55e'], ['They got', draftResult.opponent_card, '#64748b']].map(([label, card, col]) => (
-              <div key={label} style={{ textAlign: 'center' }}>
-                <div style={{ fontSize: 11, color: col, fontWeight: 700, marginBottom: 8, letterSpacing: 1 }}>{label}</div>
-                <div style={{ width: 110, borderRadius: 10, overflow: 'hidden', border: `2px solid ${col}`, boxShadow: `0 0 20px ${col}55` }}>
-                  {card.image_url ? <img src={card.image_url} style={{ width: '100%', display: 'block' }} /> : <div style={{ width: '100%', paddingBottom: '140%', background: '#1a2236' }} />}
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: 11, color: '#a855f7', fontWeight: 700, letterSpacing: 3, textTransform: 'uppercase' }}>Round {draftResult.round} — You got</div>
+          </div>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ width: 160, margin: '0 auto', borderRadius: 12, overflow: 'hidden', border: '2px solid #22c55e', boxShadow: '0 0 30px rgba(34,197,94,0.4)' }}>
+              {card.image_url ? <img src={card.image_url} style={{ width: '100%', display: 'block' }} /> : <div style={{ width: '100%', paddingBottom: '140%', background: '#1a2236' }} />}
+            </div>
+            <div style={{ marginTop: 10, fontSize: 16, fontWeight: 800, color: '#fff' }}>{card.name}</div>
+            <div style={{ fontSize: 13, color: RARITY_COL[card.card_rarity] || '#fff', marginTop: 2 }}>{card.card_rarity} · {card.overall} OVR</div>
+            <div style={{ display: 'flex', justifyContent: 'center', gap: 20, marginTop: 10 }}>
+              {[['ATK', card.attack, '#ef4444'], ['DEF', card.defense, '#3b82f6'], ['SPD', card.speed, '#22c55e']].map(([l, v, c]) => (
+                <div key={l} style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: 20, fontWeight: 900, color: c }}>{v}</div>
+                  <div style={{ fontSize: 10, color: '#475569' }}>{l}</div>
                 </div>
-                <div style={{ marginTop: 6, fontSize: 12, fontWeight: 700, color: '#fff' }}>{card.name}</div>
-                <div style={{ fontSize: 11, color: RARITY_COL[card.card_rarity] || '#fff' }}>{card.overall} OVR</div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
           <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.3)' }}>
-            {draftResult.round < 5 ? 'Next round coming…' : 'Final round done!'}
+            {draftResult.round < 5 ? `Round ${draftResult.round + 1} coming…` : 'Draft complete!'}
           </div>
         </div>
       )
@@ -369,7 +392,7 @@ export default function Battle({ token, participants = [], incomingChallenge, se
         </div>
         <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap', maxWidth: 420 }}>
           {draftComplete.your_cards.map((card, i) => (
-            <div key={i} className="anim-fadeUp" style={{ animationDelay: `${i * 0.1}s`, width: 72 }}>
+            <div key={i} className="anim-fadeUp" style={{ animationDelay: `${i * 0.1}s`, width: 100 }}>
               <div style={{ borderRadius: 8, overflow: 'hidden', border: `1px solid ${RARITY_COL[card.card_rarity] || '#fff'}44`, boxShadow: `0 0 12px ${RARITY_COL[card.card_rarity] || '#f0c040'}44` }}>
                 {card.image_url ? <img src={card.image_url} style={{ width: '100%', display: 'block' }} /> : <div style={{ width: '100%', paddingBottom: '140%', background: '#1a2236' }} />}
               </div>
