@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { apiFetch } from '../lib/api'
 import StarterPackModal from '../components/StarterPackModal'
 import OnlinePanel from '../components/OnlinePanel'
+import ProfileModal from '../components/ProfileModal'
 
 const NAV = [
   { id: 'home',       icon: 'home',         label: 'Home' },
@@ -26,6 +27,7 @@ export default function Home({ token, user, setPage, participants = [], setBattl
   const [packs, setPacks]               = useState(null)
   const [starterCards, setStarterCards] = useState(null)
   const [showOnlinePanel, setShowOnlinePanel] = useState(false)
+  const [showProfile, setShowProfile] = useState(false)
 
   useEffect(() => {
     apiFetch('/api/me', token).then(async data => {
@@ -44,6 +46,15 @@ export default function Home({ token, user, setPage, participants = [], setBattl
 
   return (
     <div style={s.root}>
+      {showProfile && (
+        <ProfileModal
+          user={user}
+          token={token}
+          onClose={() => setShowProfile(false)}
+          onTitleChange={title => setPlayer(p => ({ ...p, display_title: title || null }))}
+        />
+      )}
+
       {starterCards && (
         <StarterPackModal
           cards={starterCards}
@@ -91,7 +102,7 @@ export default function Home({ token, user, setPage, participants = [], setBattl
           </div>
 
           {/* Profile pill */}
-          <div style={s.profilePill}>
+          <div style={{ ...s.profilePill, cursor: 'pointer' }} onClick={() => setShowProfile(true)}>
             <img
               src={`https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png?size=64`}
               alt={user.username}

@@ -107,6 +107,17 @@ function App() {
       )}
       {page !== 'home' && <Nav page={page} setPage={setPage} participants={participants} user={user} token={token} setBattleMode={setBattleMode} setAutoChallenge={setAutoChallenge} />}
 
+      {/* Watermark */}
+      <div style={{
+        position: 'fixed', bottom: 10, left: 14, zIndex: 40,
+        display: 'flex', alignItems: 'center', gap: 5,
+        opacity: 0.25, pointerEvents: 'none', userSelect: 'none',
+      }}>
+        <span style={{ fontSize: 13, fontFamily: "'Montserrat', system-ui, sans-serif", fontWeight: 900, color: '#fff', letterSpacing: 1 }}>
+          FUT<span style={{ color: '#a855f7' }}>BOT</span>
+        </span>
+      </div>
+
       {/* Global challenge notification — shows on any page */}
       <ChallengeNotification
         challenge={page !== 'battle' ? incomingChallenge : null}

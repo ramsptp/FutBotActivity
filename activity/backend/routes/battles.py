@@ -210,6 +210,20 @@ async def resolve_round(room):
     if winner_id:
         room["score"][winner_id] += 1
 
+    # Update round stats in DB
+    from db import get_db
+    db = get_db()
+    for pid in player_ids:
+        db.execute("UPDATE players SET rounds_played = rounds_played + 1 WHERE user_id = ?", (int(pid),))
+    if winner_id:
+        loser_id = next(x for x in player_ids if x != winner_id)
+        db.execute("UPDATE players SET rounds_won = rounds_won + 1 WHERE user_id = ?", (int(winner_id),))
+        db.execute("UPDATE players SET rounds_lost = rounds_lost + 1 WHERE user_id = ?", (int(loser_id),))
+    else:
+        for pid in player_ids:
+            db.execute("UPDATE players SET rounds_drawn = rounds_drawn + 1 WHERE user_id = ?", (int(pid),))
+    db.commit()
+
     # Remove played cards
     for pid in player_ids:
         played_id = room["picks"][pid]["card_id"]
