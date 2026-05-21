@@ -27,6 +27,7 @@ export default function Home({ token, user, setPage, participants = [], setBattl
   const [packs, setPacks]               = useState(null)
   const [showOnlinePanel, setShowOnlinePanel] = useState(false)
   const [showProfile, setShowProfile] = useState(false)
+  const [viewingProfile, setViewingProfile] = useState(null) // { user_id, name, avatar }
   const [showHowToPlay, setShowHowToPlay] = useState(false)
 
   useEffect(() => {
@@ -46,6 +47,15 @@ export default function Home({ token, user, setPage, participants = [], setBattl
 
   return (
     <div style={s.root}>
+      {viewingProfile && (
+        <ProfileModal
+          user={user}
+          token={token}
+          viewUser={viewingProfile}
+          onClose={() => setViewingProfile(null)}
+        />
+      )}
+
       {showProfile && (
         <ProfileModal
           user={user}
@@ -203,6 +213,7 @@ export default function Home({ token, user, setPage, participants = [], setBattl
                 participants={participants}
                 onChallenge={() => { setBattleMode?.('match'); setPage('battle') }}
                 onClose={() => setShowOnlinePanel(false)}
+                onViewProfile={p => { setViewingProfile(p); setShowOnlinePanel(false) }}
               />
             )}
           </div>

@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 
-export default function OnlinePanel({ user, participants, onChallenge, onClose }) {
+export default function OnlinePanel({ user, participants, onChallenge, onClose, onViewProfile }) {
   const ref = useRef(null)
 
   useEffect(() => {
@@ -36,11 +36,12 @@ export default function OnlinePanel({ user, participants, onChallenge, onClose }
             src={p.avatar
               ? `https://cdn.discordapp.com/avatars/${p.user_id}/${p.avatar}.png?size=40`
               : `https://cdn.discordapp.com/embed/avatars/${Number(p.user_id) % 5}.png`}
-            style={s.avatar}
+            style={{ ...s.avatar, cursor: onViewProfile ? 'pointer' : 'default' }}
+            onClick={() => onViewProfile && onViewProfile(p)}
             onError={e => { e.target.src = 'https://cdn.discordapp.com/embed/avatars/0.png' }}
           />
-          <div style={{ flex: 1 }}>
-            <div style={s.name}>{p.name}</div>
+          <div style={{ flex: 1, cursor: onViewProfile ? 'pointer' : 'default' }} onClick={() => onViewProfile && onViewProfile(p)}>
+            <div style={{ ...s.name, color: onViewProfile ? '#c4b5fd' : '#e2e8f0' }}>{p.name}</div>
             <div style={s.online}>● Online</div>
           </div>
           <button onClick={() => { onChallenge(p); onClose() }} style={s.challengeBtn}>

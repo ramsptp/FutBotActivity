@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { apiFetch } from '../lib/api'
 import OnlinePanel from './OnlinePanel'
+import ProfileModal from './ProfileModal'
 
 const TABS = [
   { id: 'home',       icon: 'home',          label: 'Home' },
@@ -12,7 +13,8 @@ const TABS = [
 ]
 
 export default function Nav({ page, setPage, participants = [], user, token, setBattleMode, setAutoChallenge }) {
-  const [showPanel, setShowPanel] = useState(false)
+  const [showPanel, setShowPanel]       = useState(false)
+  const [viewingProfile, setViewingProfile] = useState(null)
 
   function handleChallenge(participant) {
     setAutoChallenge?.(participant)
@@ -21,6 +23,7 @@ export default function Nav({ page, setPage, participants = [], user, token, set
   }
 
   return (
+    <>
     <nav style={s.nav}>
       <div style={s.inner}>
         {/* Centered dock */}
@@ -75,11 +78,22 @@ export default function Nav({ page, setPage, participants = [], user, token, set
               participants={participants}
               onChallenge={handleChallenge}
               onClose={() => setShowPanel(false)}
+              onViewProfile={p => { setViewingProfile(p); setShowPanel(false) }}
             />
           )}
         </div>
       </div>
     </nav>
+
+    {viewingProfile && user && (
+      <ProfileModal
+        user={user}
+        token={token}
+        viewUser={viewingProfile}
+        onClose={() => setViewingProfile(null)}
+      />
+    )}
+    </>
   )
 }
 
