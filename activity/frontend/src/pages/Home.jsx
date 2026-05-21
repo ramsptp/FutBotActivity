@@ -3,6 +3,7 @@ import { apiFetch } from '../lib/api'
 import OnlinePanel from '../components/OnlinePanel'
 import ProfileModal from '../components/ProfileModal'
 import HowToPlayModal from '../components/HowToPlayModal'
+import { toggleMute } from '../lib/sounds'
 
 const NAV = [
   { id: 'home',       icon: 'home',         label: 'Home' },
@@ -29,6 +30,7 @@ export default function Home({ token, user, setPage, participants = [], setBattl
   const [showProfile, setShowProfile] = useState(false)
   const [viewingProfile, setViewingProfile] = useState(null) // { user_id, name, avatar }
   const [showHowToPlay, setShowHowToPlay] = useState(false)
+  const [muted, setMuted] = useState(() => localStorage.getItem('futbot-muted') === 'true')
 
   useEffect(() => {
     apiFetch('/api/me', token).then(async data => {
@@ -95,6 +97,10 @@ export default function Home({ token, user, setPage, participants = [], setBattl
 
         {/* Currency + Profile */}
         <div style={s.topRight}>
+          {/* Mute toggle */}
+          <button onClick={() => { const m = toggleMute(); setMuted(m) }} style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: '50%', width: 32, height: 32, color: muted ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.7)', fontSize: 16, cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            {muted ? '🔇' : '🔊'}
+          </button>
           {/* How to Play */}
           <button onClick={() => setShowHowToPlay(true)} style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: '50%', width: 32, height: 32, color: 'rgba(255,255,255,0.7)', fontSize: 14, fontWeight: 700, cursor: 'pointer', flexShrink: 0 }}>?</button>
           {/* Currency pill */}

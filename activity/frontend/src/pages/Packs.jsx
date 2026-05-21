@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import * as sfx from '../lib/sounds'
 import { apiFetch, preloadImages } from '../lib/api'
 import FutCard from '../components/FutCard'
 import PageTip from '../components/PageTip'
@@ -99,15 +100,16 @@ export default function Packs({ token, starterCards = null, onStarterDone = null
     setShineActive(false)
     setStatStep(0)
     setGlowPhase('none')
-    const t1  = setTimeout(() => setPhase('flash'), 900)
+    sfx.packShake()
+    const t1  = setTimeout(() => { setPhase('flash') }, 900)
     const t2  = setTimeout(() => setPhase('stats'), 1200)
-    const t3  = setTimeout(() => setStatStep(1), 1800)
-    const t4  = setTimeout(() => setStatStep(2), 2700)
-    const t5  = setTimeout(() => setStatStep(3), 3500)
-    const t6  = setTimeout(() => setStatStep(4), 4300)
-    const t7  = setTimeout(() => setStatStep(5), 5300)
-    const t8  = setTimeout(() => { setFlipped(true); setGlowPhase('reveal') }, 6400)
-    const t9  = setTimeout(() => setShineActive(true), 7000)
+    const t3  = setTimeout(() => { setStatStep(1); sfx.statReveal(1) }, 1800)
+    const t4  = setTimeout(() => { setStatStep(2); sfx.statReveal(2) }, 2700)
+    const t5  = setTimeout(() => { setStatStep(3); sfx.statReveal(3) }, 3500)
+    const t6  = setTimeout(() => { setStatStep(4); sfx.statReveal(4) }, 4300)
+    const t7  = setTimeout(() => { setStatStep(5); sfx.statReveal(5) }, 5300)
+    const t8  = setTimeout(() => { setFlipped(true); setGlowPhase('reveal'); sfx.cardFlip(); const _c = revealedCards[revealIndex]; if (_c) sfx.dramaticReveal(_c.card_rarity, _c.card_type) }, 6400)
+    const t9  = setTimeout(() => { setShineActive(true); sfx.shineSweep() }, 7000)
     const t10 = setTimeout(() => { setShineActive(false); setGlowPhase('entry') }, 7700)
     const t11 = setTimeout(() => setGlowPhase('cycle'), 8700)
     openingTimers.current = [t1,t2,t3,t4,t5,t6,t7,t8,t9,t10,t11]
@@ -145,6 +147,9 @@ export default function Packs({ token, starterCards = null, onStarterDone = null
   function flipCard(index) {
     setFlippedCards(prev => [...prev, index])
     setLastFlipped(index)
+    sfx.cardFlip()
+    const _card = revealedCards[index]
+    if (_card) sfx.dramaticReveal(_card.card_rarity, _card.card_type)
     setTimeout(() => setLastFlipped(p => p === index ? null : p), 750)
   }
 
@@ -161,13 +166,13 @@ export default function Packs({ token, starterCards = null, onStarterDone = null
     setFeaturedShine(false)
     setFeaturedGlowPhase('none')
     setFeaturedShowBack(false)
-    const t1  = setTimeout(() => setFeaturedStatStep(1), 600)
-    const t2  = setTimeout(() => setFeaturedStatStep(2), 1400)
-    const t3  = setTimeout(() => setFeaturedStatStep(3), 2200)
-    const t4  = setTimeout(() => setFeaturedStatStep(4), 3000)
-    const t5  = setTimeout(() => setFeaturedStatStep(5), 4000)
-    const t6  = setTimeout(() => { setFeaturedFlipped(true); setFeaturedGlowPhase('reveal') }, 5100)
-    const t7  = setTimeout(() => setFeaturedShine(true), 5700)
+    const t1  = setTimeout(() => { setFeaturedStatStep(1); sfx.statReveal(1) }, 600)
+    const t2  = setTimeout(() => { setFeaturedStatStep(2); sfx.statReveal(2) }, 1400)
+    const t3  = setTimeout(() => { setFeaturedStatStep(3); sfx.statReveal(3) }, 2200)
+    const t4  = setTimeout(() => { setFeaturedStatStep(4); sfx.statReveal(4) }, 3000)
+    const t5  = setTimeout(() => { setFeaturedStatStep(5); sfx.statReveal(5) }, 4000)
+    const t6  = setTimeout(() => { setFeaturedFlipped(true); setFeaturedGlowPhase('reveal'); sfx.cardFlip(); sfx.dramaticReveal(card.card_rarity, card.card_type) }, 5100)
+    const t7  = setTimeout(() => { setFeaturedShine(true); sfx.shineSweep() }, 5700)
     const t8  = setTimeout(() => { setFeaturedShine(false); setFeaturedGlowPhase('entry') }, 6400)
     const t9  = setTimeout(() => setFeaturedGlowPhase('cycle'), 7400)
     const t10 = setTimeout(() => setFeaturedShowBack(true), 6800)
@@ -432,7 +437,7 @@ export default function Packs({ token, starterCards = null, onStarterDone = null
               </div>
             )}
             {!featuredFlipped && (
-              <button onClick={dismissFeatured} style={{ position: 'absolute', bottom: 90, left: '50%', transform: 'translateX(-50%)', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.25)', borderRadius: 20, color: 'rgba(255,255,255,0.7)', padding: '8px 28px', fontSize: 14, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+              <button onClick={dismissFeatured} style={{ position: 'absolute', top: 16, right: 16, background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: 20, color: 'rgba(255,255,255,0.5)', padding: '5px 16px', fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>
                 Skip →
               </button>
             )}
@@ -537,7 +542,7 @@ export default function Packs({ token, starterCards = null, onStarterDone = null
 
         {/* Skip button — only while animating */}
         {!flipped && (
-          <button onClick={skipOpening} style={{ position: 'absolute', bottom: 90, left: '50%', transform: 'translateX(-50%)', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.25)', borderRadius: 20, color: 'rgba(255,255,255,0.7)', padding: '8px 28px', fontSize: 14, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+          <button onClick={skipOpening} style={{ position: 'absolute', top: 16, right: 16, background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: 20, color: 'rgba(255,255,255,0.5)', padding: '5px 16px', fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>
             Skip →
           </button>
         )}

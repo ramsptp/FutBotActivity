@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import * as sfx from '../lib/sounds'
 import { apiFetch } from '../lib/api'
 import FutCard from '../components/FutCard'
 import PageTip from '../components/PageTip'
@@ -53,7 +54,7 @@ export default function DeckBuilder({ token, tutorialStep = 0, onTutorialAdvance
       const isEdit = decks.find(d => d.deck_name === activeDeck.deck_name)
       if (isEdit) await apiFetch(`/api/decks/${activeDeck.deck_name}`, token, { method: 'PUT',  body: JSON.stringify(body) })
       else        await apiFetch('/api/decks',                          token, { method: 'POST', body: JSON.stringify(body) })
-      await fetchDecks(); setView('list')
+      await fetchDecks(); setView('list'); sfx.deckSaved()
     } catch (e) { setError(e.message) }
     setSaving(false)
   }

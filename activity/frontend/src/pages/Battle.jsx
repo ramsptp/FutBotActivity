@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import * as sfx from '../lib/sounds'
 import { apiFetch, preloadImages } from '../lib/api'
 import FutCard from '../components/FutCard'
 import HowToPlayModal from '../components/HowToPlayModal'
@@ -100,12 +101,12 @@ export default function Battle({ token, participants = [], incomingChallenge, se
 
         case 'round_result':
           preloadImages([msg.your_card?.image_url, msg.opponent_card?.image_url])
-          setRoundResult(msg); setScore(msg.score); setScreen('round_result'); break
+          setRoundResult(msg); setScore(msg.score); setScreen('round_result'); if(msg.round_winner==='you') sfx.roundWin(); else if(msg.round_winner==='opponent') sfx.roundLose(); break
 
         case 'game_over':
           setGameResult(msg)
           setRematchRequested(false); setOpponentRequestedRematch(false)
-          setScreen('game_over'); break
+          setScreen('game_over'); if(msg.winner==='you') sfx.matchWin(); else if(msg.winner==='opponent') sfx.matchLose(); break
 
         case 'rematch_requested':
           setOpponentRequestedRematch(true); break
