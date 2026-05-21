@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { apiFetch, preloadImages } from '../lib/api'
 import FutCard from '../components/FutCard'
 
@@ -48,6 +48,12 @@ export default function Packs({ token, starterCards = null, onStarterDone = null
   const [shineActive, setShineActive] = useState(false)
   const [flippedCards, setFlippedCards] = useState([])
   const [lastFlipped, setLastFlipped]   = useState(null)
+  const [featuredIndex, setFeaturedIndex] = useState(null)
+  const [featuredCard, setFeaturedCard]   = useState(null)
+  const [featuredStatStep, setFeaturedStatStep] = useState(0)
+  const [featuredFlipped, setFeaturedFlipped]   = useState(false)
+  const [featuredShine, setFeaturedShine]       = useState(false)
+  const featuredTimers = useRef([])
   const [statStep, setStatStep]   = useState(0)
   const [loading, setLoading]     = useState(false)
   const [error, setError]         = useState(null)
@@ -63,7 +69,9 @@ export default function Packs({ token, starterCards = null, onStarterDone = null
     setScreen('fan')
     const fanCards = topForFan(starterCards)
     preloadImages(fanCards.map(c => c.image_url)).then(() => {
-      setRevealedCards(fanCards)  // deal-in animation triggers once images are ready
+      setRevealedCards(fanCards)
+      const maxOvr = Math.max(...fanCards.map(c => c.overall))
+      setFeaturedIndex(fanCards.findIndex(c => c.overall === maxOvr))
     })
   }, [starterCards])
 
@@ -104,6 +112,8 @@ export default function Packs({ token, starterCards = null, onStarterDone = null
       if (cards.length > 1) {
         setFlippedCards([])
         setLastFlipped(null)
+        const maxOvr = Math.max(...displayCards.map(c => c.overall))
+        setFeaturedIndex(displayCards.findIndex(c => c.overall === maxOvr))
         setScreen('fan')
       } else {
         setRevealIndex(0)
@@ -125,6 +135,29 @@ export default function Packs({ token, starterCards = null, onStarterDone = null
     unflipped.forEach((i, j) => setTimeout(() => flipCard(i), j * 70))
   }
 
+  function startFeaturedReveal(card, index) {
+    featuredTimers.current.forEach(clearTimeout)
+    setFeaturedCard({ card, index })
+    setFeaturedStatStep(0)
+    setFeaturedFlipped(false)
+    setFeaturedShine(false)
+    const t1 = setTimeout(() => setFeaturedStatStep(1), 600)
+    const t2 = setTimeout(() => setFeaturedStatStep(2), 1400)
+    const t3 = setTimeout(() => setFeaturedStatStep(3), 2200)
+    const t4 = setTimeout(() => setFeaturedStatStep(4), 3000)
+    const t5 = setTimeout(() => setFeaturedStatStep(5), 4000)
+    const t6 = setTimeout(() => setFeaturedFlipped(true), 5100)
+    const t7 = setTimeout(() => setFeaturedShine(true), 5700)
+    const t8 = setTimeout(() => setFeaturedShine(false), 6400)
+    featuredTimers.current = [t1,t2,t3,t4,t5,t6,t7,t8]
+  }
+
+  function dismissFeatured() {
+    featuredTimers.current.forEach(clearTimeout)
+    if (featuredCard) flipCard(featuredCard.index)
+    setFeaturedCard(null)
+  }
+
   function nextCard() {
     if (revealIndex < revealedCards.length - 1) {
       setRevealIndex(i => i + 1) // useEffect handles the animation reset
@@ -141,6 +174,16 @@ export default function Packs({ token, starterCards = null, onStarterDone = null
     const packLabel = PACK_META[openingPack]?.label
     const ROTS = [-8, 6, -11, 9, -5, 12, -7, 10, -9, 5, -12, 7, -6, 11, -4, 8]
 
+    // Pre-compute featured card colors
+    const fc = featuredCard?.card
+    const fcColors = fc ? getCardColor(fc) : null
+    const fcFlash = fcColors?.flash || 'rgba(240,192,64,0.5)'
+    const fcRgb = fcFlash.match(/rgba?\((\d+,\s*\d+,\s*\d+)/)?.[1] || '240,192,64'
+    const fcDropShadow = fcColors ? fcColors.glow.split(', ').map(s => {
+      const m = s.match(/rgba?\([^)]+\)/); const parts = s.trim().split(/\s+/)
+      return `drop-shadow(0 0 ${parts[2] || '20px'} ${m?.[0] || 'gold'})`
+    }).join(' ') : ''
+
     return (
       <div style={{ position: 'fixed', inset: 0, background: '#050914', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-start', gap: 20, overflowY: 'auto', padding: '32px 12px 110px' }}>
         <style>{`
@@ -153,6 +196,32 @@ export default function Packs({ token, starterCards = null, onStarterDone = null
             10%  { opacity: 0.7; }
             90%  { opacity: 0.7; }
             100% { left: 130%; opacity: 0; }
+          }
+          @keyframes cardEntrance {
+            from { transform: translateY(40px) scale(0.9); opacity: 0; }
+            to   { transform: translateY(0) scale(1); opacity: 1; }
+          }
+          @keyframes statIn {
+            0%   { transform: scale(0.4) translateY(16px); opacity: 0; filter: brightness(5); }
+            60%  { filter: brightness(1.6); }
+            100% { transform: scale(1) translateY(0); opacity: 1; filter: brightness(1); }
+          }
+          @keyframes ovrIn {
+            0%   { transform: scale(0.15); opacity: 0; filter: brightness(10) blur(8px); }
+            50%  { filter: brightness(3) blur(0px); }
+            100% { transform: scale(1); opacity: 1; filter: brightness(1); }
+          }
+          @keyframes ovrGlow {
+            0%,100% { text-shadow: 0 0 20px rgba(240,192,64,0.6); }
+            50%      { text-shadow: 0 0 50px rgba(240,192,64,1), 0 0 80px rgba(240,192,64,0.5); }
+          }
+          @keyframes fcBackPulse {
+            0%,100% { box-shadow: 0 0 20px rgba(${fcRgb},0.4); }
+            50%      { box-shadow: 0 0 50px rgba(${fcRgb},0.9), 0 0 80px rgba(${fcRgb},0.3); }
+          }
+          @keyframes featuredIn {
+            from { opacity: 0; }
+            to   { opacity: 1; }
           }
         `}</style>
 
@@ -207,7 +276,11 @@ export default function Packs({ token, starterCards = null, onStarterDone = null
             return (
               <div
                 key={i}
-                onClick={() => !isFlipped && flipCard(i)}
+                onClick={() => {
+                  if (isFlipped) return
+                  if (i === featuredIndex) startFeaturedReveal(card, i)
+                  else flipCard(i)
+                }}
                 style={{ animation: `dealIn 0.45s cubic-bezier(0.34,1.3,0.64,1) ${i * 0.09}s both`, cursor: isFlipped ? 'default' : 'pointer' }}
               >
                 <div style={{ perspective: 700 }}>
@@ -239,6 +312,85 @@ export default function Packs({ token, starterCards = null, onStarterDone = null
           <button className="btn-primary anim-fadeUp" onClick={() => setScreen('result')}>
             See All Cards
           </button>
+        )}
+
+        {/* ── FEATURED REVEAL OVERLAY ── */}
+        {featuredCard && (
+          <div style={{ position: 'fixed', inset: 0, background: '#050914', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 20, zIndex: 50, animation: 'featuredIn 0.3s ease' }}>
+            {/* Atmospheric rarity glow */}
+            {!featuredFlipped && (
+              <div style={{ position: 'fixed', inset: 0, background: `radial-gradient(ellipse at 50% 42%, ${fcFlash.replace(/[\d.]+\)$/, '0.14)')}, transparent 65%)`, pointerEvents: 'none' }} />
+            )}
+
+            {/* Card */}
+            <div style={{ width: 220, perspective: 900, animation: 'cardEntrance 0.4s ease both' }}>
+              <div style={{ width: '100%', transformStyle: 'preserve-3d', position: 'relative', transition: 'transform 0.6s cubic-bezier(0.4,0,0.2,1)', transform: featuredFlipped ? 'rotateY(0deg)' : 'rotateY(180deg)', borderRadius: 10, animation: !featuredFlipped ? 'fcBackPulse 0.8s ease infinite' : 'none' }}>
+                <div style={{ backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden', borderRadius: 10, overflow: 'hidden', position: 'relative', filter: featuredFlipped ? fcDropShadow : 'none', transition: 'filter 0.4s ease' }}>
+                  <FutCard card={fc} />
+                  {featuredShine && (
+                    <div style={{ position: 'absolute', top: 0, bottom: 0, width: '45%', background: 'linear-gradient(to right, transparent, rgba(255,255,255,0.55), transparent)', transform: 'skewX(-12deg)', animation: 'shineSweep 0.65s ease forwards', pointerEvents: 'none' }} />
+                  )}
+                </div>
+                <div style={{ position: 'absolute', inset: 0, backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden', transform: 'rotateY(180deg)', background: 'linear-gradient(135deg,#1e3a5f,#0f1f3d)', borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <span style={{ fontSize: 40 }}>⚽</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Stats (face-down) */}
+            {!featuredFlipped && featuredStatStep > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 18 }}>
+                {featuredStatStep >= 1 && (
+                  <div style={{ textAlign: 'center', animation: 'statIn 0.4s cubic-bezier(0.34,1.56,0.64,1) both' }}>
+                    <div style={{ fontSize: 13, fontWeight: 800, letterSpacing: 4, color: { Common:'#94a3b8', Uncommon:'#22c55e', Rare:'#f0c040' }[fc.card_rarity] || '#fff', textTransform: 'uppercase', filter: 'drop-shadow(0 0 8px currentColor)' }}>
+                      {fc.card_rarity} &nbsp;·&nbsp; {fc.card_type}
+                    </div>
+                  </div>
+                )}
+                <div style={{ display: 'flex', gap: 36, alignItems: 'flex-end' }}>
+                  {featuredStatStep >= 2 && (
+                    <div style={{ textAlign: 'center', animation: 'statIn 0.4s cubic-bezier(0.34,1.56,0.64,1) both' }}>
+                      <div style={{ fontSize: 40, fontWeight: 900, color: '#ef4444', lineHeight: 1, filter: 'drop-shadow(0 0 10px rgba(239,68,68,0.7))' }}>{fc.attack}</div>
+                      <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', letterSpacing: 2, marginTop: 4 }}>ATK</div>
+                    </div>
+                  )}
+                  {featuredStatStep >= 3 && (
+                    <div style={{ textAlign: 'center', animation: 'statIn 0.4s cubic-bezier(0.34,1.56,0.64,1) both' }}>
+                      <div style={{ fontSize: 40, fontWeight: 900, color: '#3b82f6', lineHeight: 1, filter: 'drop-shadow(0 0 10px rgba(59,130,246,0.7))' }}>{fc.defense}</div>
+                      <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', letterSpacing: 2, marginTop: 4 }}>DEF</div>
+                    </div>
+                  )}
+                  {featuredStatStep >= 4 && (
+                    <div style={{ textAlign: 'center', animation: 'statIn 0.4s cubic-bezier(0.34,1.56,0.64,1) both' }}>
+                      <div style={{ fontSize: 40, fontWeight: 900, color: '#22c55e', lineHeight: 1, filter: 'drop-shadow(0 0 10px rgba(34,197,94,0.7))' }}>{fc.speed}</div>
+                      <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', letterSpacing: 2, marginTop: 4 }}>SPD</div>
+                    </div>
+                  )}
+                </div>
+                {featuredStatStep >= 5 && (
+                  <div style={{ textAlign: 'center', animation: 'ovrIn 0.55s cubic-bezier(0.34,1.56,0.64,1) both' }}>
+                    <div style={{ fontSize: 76, fontWeight: 900, color: '#f0c040', lineHeight: 1, animation: 'ovrGlow 1.2s ease infinite', letterSpacing: -2 }}>{fc.overall}</div>
+                    <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', letterSpacing: 4, marginTop: 4 }}>OVERALL</div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Post-flip */}
+            {featuredFlipped && (
+              <div className="anim-fadeUp" style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: 20, fontWeight: 700, color: '#fff' }}>{fc.name}</div>
+                <div style={{ fontSize: 13, margin: '4px 0 16px', color: { Common:'#94a3b8', Uncommon:'#22c55e', Rare:'#f0c040' }[fc.card_rarity] || '#fff', fontWeight: 600 }}>
+                  {fc.card_rarity} · {fc.card_type}
+                </div>
+              </div>
+            )}
+            {featuredFlipped && !featuredShine && (
+              <button className="btn-primary anim-fadeUp" onClick={dismissFeatured} style={{ maxWidth: 260 }}>
+                Back to Pack
+              </button>
+            )}
+          </div>
         )}
       </div>
     )
