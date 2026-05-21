@@ -20,7 +20,7 @@ const EMBERS = [
   { left: '92%', size: 5,  delay: '5s',  dur: '7s' },
 ]
 
-export default function Home({ token, user, setPage, participants = [] }) {
+export default function Home({ token, user, setPage, participants = [], setBattleMode }) {
   const [player, setPlayer]             = useState(null)
   const [packs, setPacks]               = useState(null)
   const [starterCards, setStarterCards] = useState(null)
@@ -121,10 +121,10 @@ export default function Home({ token, user, setPage, participants = [] }) {
           <div style={{ ...s.centerPanel, ...s.goldPanel }}>
             <div style={s.centerOverlay} />
             <div style={s.centerBottom}>
-              <button style={{ ...s.findMatchBtn }} onClick={() => setPage('battle')}>
+              <button style={{ ...s.findMatchBtn }} onClick={() => { setBattleMode?.('match'); setPage('battle') }}>
                 FIND MATCH
               </button>
-              <button style={s.friendBtn} onClick={() => setPage('battle')}>
+              <button style={s.friendBtn} onClick={() => { setBattleMode?.('friend'); setPage('battle') }}>
                 <span className="material-symbols-outlined" style={{ fontSize: 16 }}>group</span>
                 PLAY WITH FRIEND
               </button>

@@ -9,11 +9,13 @@ import Battle from './pages/Battle'
 import Packs from './pages/Packs'
 import Shop from './pages/Shop'
 import LoadingScreen from './components/LoadingScreen'
+import ChallengeNotification from './components/ChallengeNotification'
 
 function App() {
   const [auth, setAuth] = useState(null)
   const [error, setError] = useState(null)
   const [page, setPage] = useState('home')
+  const [battleMode, setBattleMode] = useState('match') // 'match' | 'friend'
   const [participants, setParticipants] = useState([])
   const [incomingChallenge, setIncomingChallenge] = useState(null)
   const authing = useRef(false)
@@ -86,7 +88,7 @@ function App() {
       minHeight: '100svh',
       background: "url('/background.png') center center / cover no-repeat fixed",
     } : undefined}>
-      {page === 'home' && <Home token={token} user={user} setPage={setPage} participants={participants} />}
+      {page === 'home' && <Home token={token} user={user} setPage={setPage} participants={participants} setBattleMode={setBattleMode} />}
       {page === 'collection' && <Collection token={token} />}
       {page === 'decks' && <DeckBuilder token={token} />}
       {page === 'packs' && <Packs token={token} />}
@@ -97,9 +99,28 @@ function App() {
           participants={participants}
           incomingChallenge={incomingChallenge}
           setIncomingChallenge={setIncomingChallenge}
+          initialMode={battleMode}
         />
       )}
       {page !== 'home' && <Nav page={page} setPage={setPage} participants={participants} user={user} />}
+
+      {/* Global challenge notification — shows on any page */}
+      <ChallengeNotification
+        challenge={page !== 'battle' ? incomingChallenge : null}
+        onAccept={() => {
+          setBattleMode('friend')
+          setPage('battle')
+        }}
+        onDecline={async () => {
+          setIncomingChallenge(null)
+          try {
+            await fetch('/api/challenges/decline', {
+              method: 'DELETE',
+              headers: { Authorization: `Bearer ${token}` },
+            })
+          } catch {}
+        }}
+      />
     </div>
   )
 }

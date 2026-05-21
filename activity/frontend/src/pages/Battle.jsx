@@ -7,7 +7,7 @@ const STAT_ICON  = { attack: '⚔️', defense: '🛡️', speed: '💨' }
 const STAT_COLOR = { attack: '#ef4444', defense: '#3b82f6', speed: '#22c55e' }
 const COUNTER_OF = { attack: 'Defense', defense: 'Attack', speed: 'Speed' }
 
-export default function Battle({ token, participants = [], incomingChallenge, setIncomingChallenge }) {
+export default function Battle({ token, participants = [], incomingChallenge, setIncomingChallenge, initialMode = 'match' }) {
   const [screen, setScreen]   = useState('lobby')
   const [decks, setDecks]     = useState([])
   const [selectedDeck, setSelectedDeck] = useState('')
@@ -182,9 +182,7 @@ export default function Battle({ token, participants = [], incomingChallenge, se
   /* ── LOBBY ── */
   if (screen === 'lobby') return (
     <div className="page">
-      <h2 style={{ color: '#fff', fontWeight: 700, fontSize: 20, marginBottom: 16 }}>⚔️ Battle</h2>
-      {error && <div style={{ background: '#3d1515', color: '#f87171', borderRadius: 8, padding: '8px 12px', marginBottom: 12, fontSize: 13 }}>{error}</div>}
-
+      {/* Incoming challenge banner — shown on both modes */}
       {incomingChallenge && (
         <div style={{ background: 'rgba(34,197,94,0.1)', border: '1px solid var(--green)', borderRadius: 12, padding: '12px 16px', marginBottom: 14 }}>
           <div style={{ fontSize: 14, marginBottom: 10 }}>⚔️ <strong>{incomingChallenge.from_name}</strong> challenged you!</div>
@@ -196,30 +194,49 @@ export default function Battle({ token, participants = [], incomingChallenge, se
       )}
 
       <label style={{ display: 'block', color: 'var(--muted)', fontSize: 13, marginBottom: 6 }}>Select your deck</label>
-      <select value={selectedDeck} onChange={e => setSelectedDeck(e.target.value)} style={{ width: '100%', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, color: '#fff', padding: '10px 12px', fontSize: 14, marginBottom: 14 }}>
+      <select value={selectedDeck} onChange={e => setSelectedDeck(e.target.value)} style={{ width: '100%', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, color: '#fff', padding: '10px 12px', fontSize: 14, marginBottom: 16 }}>
         <option value="">— choose a deck —</option>
         {decks.map(d => <option key={d.deck_name} value={d.deck_name}>{d.deck_name}</option>)}
       </select>
 
-      {participants.length > 0 && (
-        <div style={{ marginBottom: 14 }}>
-          <div style={{ color: 'var(--muted)', fontSize: 12, marginBottom: 8 }}>In this session</div>
-          {participants.map(p => (
-            <div key={p.user_id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, padding: '10px 14px', marginBottom: 8 }}>
-              <span style={{ fontSize: 14, fontWeight: 500 }}>👤 {p.name}</span>
-              <button onClick={() => challengePlayer(p.user_id)} style={{ background: 'var(--accent)', border: 'none', borderRadius: 8, color: '#fff', padding: '6px 14px', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>Challenge</button>
-            </div>
-          ))}
-        </div>
-      )}
+      {error && <div style={{ background: '#3d1515', color: '#f87171', borderRadius: 8, padding: '8px 12px', marginBottom: 12, fontSize: 13 }}>{error}</div>}
 
-      <button className="btn-primary" onClick={createRoom}>Create Room</button>
-      <div style={{ color: 'var(--muted)', fontSize: 13, textAlign: 'center', margin: '10px 0' }}>or join with a code</div>
-      <div style={{ display: 'flex', gap: 8 }}>
-        <input value={joinCode} onChange={e => setJoinCode(e.target.value.toUpperCase())} maxLength={6} placeholder="Room code"
-          style={{ flex: 1, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, color: '#fff', padding: '10px 12px', fontSize: 16, letterSpacing: 4 }} />
-        <button onClick={joinRoom} style={{ background: 'var(--accent)', border: 'none', borderRadius: 8, color: '#fff', padding: '10px 18px', cursor: 'pointer', fontSize: 14, fontWeight: 600 }}>Join</button>
-      </div>
+      {initialMode === 'match' ? (
+        /* ── FIND MATCH: challenge people in the session ── */
+        <>
+          <h2 style={{ color: '#fff', fontWeight: 700, fontSize: 18, marginBottom: 12 }}>⚔️ Find Match</h2>
+          {participants.length > 0 ? (
+            <>
+              <div style={{ color: 'var(--muted)', fontSize: 12, marginBottom: 10 }}>Players in this session</div>
+              {participants.map(p => (
+                <div key={p.user_id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, padding: '10px 14px', marginBottom: 8 }}>
+                  <span style={{ fontSize: 14, fontWeight: 500 }}>👤 {p.name}</span>
+                  <button onClick={() => challengePlayer(p.user_id)} style={{ background: 'var(--accent)', border: 'none', borderRadius: 8, color: '#fff', padding: '6px 14px', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>Challenge</button>
+                </div>
+              ))}
+            </>
+          ) : (
+            <div style={{ background: 'var(--surface)', borderRadius: 12, padding: '24px 16px', textAlign: 'center', color: 'var(--muted)', fontSize: 14, marginBottom: 14 }}>
+              <div style={{ fontSize: 32, marginBottom: 8 }}>👥</div>
+              No one else is in this session yet.<br />Use Play with Friend to invite via code.
+            </div>
+          )}
+          <div style={{ color: 'var(--muted)', fontSize: 13, textAlign: 'center', margin: '14px 0 8px' }}>or create a room to wait</div>
+          <button className="btn-primary" onClick={createRoom}>Create Room</button>
+        </>
+      ) : (
+        /* ── PLAY WITH FRIEND: code-based ── */
+        <>
+          <h2 style={{ color: '#fff', fontWeight: 700, fontSize: 18, marginBottom: 12 }}>👥 Play with Friend</h2>
+          <button className="btn-primary" onClick={createRoom} style={{ marginBottom: 8 }}>Create Room & Share Code</button>
+          <div style={{ color: 'var(--muted)', fontSize: 13, textAlign: 'center', margin: '10px 0' }}>or join a friend's room</div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input value={joinCode} onChange={e => setJoinCode(e.target.value.toUpperCase())} maxLength={6} placeholder="Enter room code"
+              style={{ flex: 1, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, color: '#fff', padding: '10px 12px', fontSize: 16, letterSpacing: 4 }} />
+            <button onClick={joinRoom} style={{ background: 'var(--accent)', border: 'none', borderRadius: 8, color: '#fff', padding: '10px 18px', cursor: 'pointer', fontSize: 14, fontWeight: 600 }}>Join</button>
+          </div>
+        </>
+      )}
     </div>
   )
 
