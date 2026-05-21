@@ -1,6 +1,7 @@
 import asyncio
 import json
 import os
+import random
 import time
 import httpx
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query, Depends
@@ -30,6 +31,7 @@ class LobbyRegister(BaseModel):
 class ChallengeBody(BaseModel):
     to_user_id: str
     room_id: str
+    mode: str = "deck"
 
 @router.post("/api/lobby/register")
 async def register_lobby(body: LobbyRegister, discord_user=Depends(get_current_user)):
@@ -60,6 +62,7 @@ async def send_challenge(body: ChallengeBody, discord_user=Depends(get_current_u
         "from_user_id": from_id,
         "from_name": discord_user["username"],
         "room_id": body.room_id,
+        "mode": body.mode,
         "expires_at": time.time() + CHALLENGE_TTL,
     }
     return {"ok": True}
@@ -297,6 +300,137 @@ async def end_game(room):
         })
 
 
+# ── Fantasy Draft helpers ─────────────────────────────────────────
+
+def get_draft_cards(round_num: int, used_ids: set, db):
+    """Tier-ramped card selection: rounds 1-2 = tier1, 3-4 = tier1+2, 5 = tier2+3"""
+    if round_num <= 2:
+        tiers = [1]
+    elif round_num <= 4:
+        tiers = [1, 2]
+    else:
+        tiers = [2, 3]
+    tier_ph = ",".join("?" * len(tiers))
+    if used_ids:
+        id_ph = ",".join("?" * len(used_ids))
+        rows = db.execute(
+            f"SELECT * FROM fantasy_cards WHERE fantasy_tier IN ({tier_ph}) AND fantasy_card_id NOT IN ({id_ph}) ORDER BY RANDOM() LIMIT 3",
+            tiers + list(used_ids)
+        ).fetchall()
+    else:
+        rows = db.execute(
+            f"SELECT * FROM fantasy_cards WHERE fantasy_tier IN ({tier_ph}) ORDER BY RANDOM() LIMIT 3",
+            tiers
+        ).fetchall()
+    cards = []
+    for row in rows:
+        d = dict(row)
+        d["image_url"] = "/fantasy-images/" + os.path.basename(d["image_path"]) if d.get("image_path") else None
+        d["card_id"] = d["fantasy_card_id"]  # alias so battle system works
+        del d["image_path"]
+        cards.append(d)
+    return cards
+
+
+async def start_draft_round(room):
+    from db import get_db
+    db = get_db()
+    draft = room["draft"]
+    cards = get_draft_cards(draft["round"], draft["used_ids"], db)
+    draft["cards"] = cards
+    draft["picks"] = {}
+    draft["claimed"] = {}
+    positions = list(range(len(cards)))
+    random.shuffle(positions)
+    draft["position_to_card"] = positions
+    for pid in room["players"]:
+        await send_to(room["players"][pid], {
+            "type": "draft_round_start",
+            "round": draft["round"],
+            "total_rounds": 5,
+            "cards": cards,
+        })
+    asyncio.create_task(_draft_timeout(room, draft["round"]))
+
+
+async def _draft_timeout(room, round_num):
+    await asyncio.sleep(25)
+    draft = room.get("draft", {})
+    if draft.get("round") != round_num or room.get("state") != "drafting":
+        return
+    player_ids = list(room["players"].keys())
+    all_pos = [0, 1, 2]
+    for pid in player_ids:
+        if pid not in draft["picks"]:
+            unclaimed = [p for p in all_pos if p not in draft["claimed"]]
+            if unclaimed:
+                pos = random.choice(unclaimed)
+                draft["claimed"][pos] = pid
+                draft["picks"][pid] = pos
+    if len(draft["picks"]) >= 1 and not draft.get("resolved"):
+        draft["resolved"] = True
+        asyncio.create_task(resolve_draft_round(room))
+
+
+async def resolve_draft_round(room):
+    draft = room["draft"]
+    player_ids = list(room["players"].keys())
+    host_id = room["host_id"]
+    guest_id = next(x for x in player_ids if x != host_id)
+    ptc = draft.get("position_to_card", [0, 1, 2])
+
+    host_pos  = draft["picks"].get(host_id,  0)
+    guest_pos = draft["picks"].get(guest_id, min(1, len(draft["cards"]) - 1))
+
+    host_card  = draft["cards"][ptc[host_pos]]  if host_pos  < len(ptc) else draft["cards"][0]
+    guest_card = draft["cards"][ptc[guest_pos]] if guest_pos < len(ptc) else draft["cards"][-1]
+
+    draft["host_hand"].append(host_card)
+    draft["guest_hand"].append(guest_card)
+    draft["used_ids"].add(host_card["fantasy_card_id"])
+    draft["used_ids"].add(guest_card["fantasy_card_id"])
+
+    for pid in player_ids:
+        is_host = pid == host_id
+        await send_to(room["players"][pid], {
+            "type": "draft_round_result",
+            "round": draft["round"],
+            "your_card": host_card if is_host else guest_card,
+            "opponent_card": guest_card if is_host else host_card,
+            "your_deck_so_far": draft["host_hand"] if is_host else draft["guest_hand"],
+        })
+
+    await asyncio.sleep(2.5)
+    draft["round"] += 1
+    draft["resolved"] = False
+    if draft["round"] > 5:
+        await complete_draft(room)
+    else:
+        await start_draft_round(room)
+
+
+async def complete_draft(room):
+    draft = room["draft"]
+    player_ids = list(room["players"].keys())
+    host_id = room["host_id"]
+    guest_id = next(x for x in player_ids if x != host_id)
+
+    room["players"][host_id]["hand"]  = list(draft["host_hand"])
+    room["players"][guest_id]["hand"] = list(draft["guest_hand"])
+
+    for pid in player_ids:
+        is_host = pid == host_id
+        await send_to(room["players"][pid], {
+            "type": "draft_complete",
+            "your_cards": draft["host_hand"] if is_host else draft["guest_hand"],
+            "opponent_cards": draft["guest_hand"] if is_host else draft["host_hand"],
+        })
+    await asyncio.sleep(3.5)
+    room["round"] = 1
+    room["score"] = {pid: 0 for pid in player_ids}
+    await start_round(room)
+
+
 async def send_select_deck(room):
     player_ids = list(room["players"].keys())
     for pid in player_ids:
@@ -312,6 +446,7 @@ async def battle_ws(
     websocket: WebSocket,
     room_id: str,
     token: str = Query(...),
+    mode: str = Query("deck"),
 ):
     await websocket.accept()
 
@@ -329,6 +464,7 @@ async def battle_ws(
             "room_id": room_id,
             "players": {},
             "host_id": user_id,
+            "mode": mode,
             "state": "waiting",
             "round": 1,
             "chosen_stat": None,
@@ -350,13 +486,39 @@ async def battle_ws(
     if len(room["players"]) == 1:
         await send_to(room["players"][user_id], {"type": "waiting", "room_id": room_id})
     else:
-        room["state"] = "selecting_decks"
-        await send_select_deck(room)
+        if room.get("mode") == "draft":
+            room["state"] = "drafting"
+            room["draft"] = {
+                "round": 1, "cards": [], "picks": {}, "used_ids": set(),
+                "claimed": {}, "host_hand": [], "guest_hand": [],
+                "position_to_card": [0, 1, 2], "resolved": False,
+            }
+            asyncio.create_task(start_draft_round(room))
+        else:
+            room["state"] = "selecting_decks"
+            await send_select_deck(room)
 
     try:
         while True:
             data = await websocket.receive_text()
             msg = json.loads(data)
+
+            # Fantasy draft pick
+            if msg.get("type") == "draft_pick" and room.get("mode") == "draft" and room["state"] == "drafting":
+                position = msg.get("position")
+                draft = room["draft"]
+                if position not in [0, 1, 2] or position in draft["claimed"] or user_id in draft["picks"] or draft.get("resolved"):
+                    continue
+                draft["claimed"][position] = user_id
+                draft["picks"][user_id] = position
+                player_ids = list(room["players"].keys())
+                opp_id = next(pid for pid in player_ids if pid != user_id)
+                await send_to(room["players"][user_id], {"type": "draft_position_claimed", "position": position, "by": "you"})
+                await send_to(room["players"][opp_id],  {"type": "draft_position_claimed", "position": position, "by": "opponent"})
+                if len(draft["picks"]) == 2 and not draft.get("resolved"):
+                    draft["resolved"] = True
+                    asyncio.create_task(resolve_draft_round(room))
+                continue
 
             # Deck selection in arena
             if msg.get("type") == "ready" and room["state"] == "selecting_decks":
@@ -439,11 +601,20 @@ async def battle_ws(
                         room["players"][pid]["hand"] = None
                     room["round"] = 1
                     room["score"] = {pid: 0 for pid in player_ids}
-                    room["state"] = "selecting_decks"
                     room["rematch_requests"] = set()
                     room["picks"] = {}
                     room["chosen_stat"] = None
-                    asyncio.create_task(send_select_deck(room))
+                    if room.get("mode") == "draft":
+                        room["state"] = "drafting"
+                        room["draft"] = {
+                            "round": 1, "cards": [], "picks": {}, "used_ids": set(),
+                            "claimed": {}, "host_hand": [], "guest_hand": [],
+                            "position_to_card": [0, 1, 2], "resolved": False,
+                        }
+                        asyncio.create_task(start_draft_round(room))
+                    else:
+                        room["state"] = "selecting_decks"
+                        asyncio.create_task(send_select_deck(room))
 
     except WebSocketDisconnect:
         room["players"].pop(user_id, None)

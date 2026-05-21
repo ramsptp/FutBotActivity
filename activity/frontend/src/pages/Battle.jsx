@@ -24,6 +24,20 @@ export default function Battle({ token, participants = [], incomingChallenge, se
   const [surrenderConfirm, setSurrenderConfirm] = useState(false)
   const [showAcceptScreen, setShowAcceptScreen] = useState(false)
   const [showHowToPlay, setShowHowToPlay] = useState(false)
+  const [lobbyPickingMode, setLobbyPickingMode] = useState(null) // participant for mode picker
+
+  // Draft state
+  const [draftRound, setDraftRound]     = useState(0)
+  const [draftCards, setDraftCards]     = useState([])
+  const [draftClaimed, setDraftClaimed] = useState({})  // position -> 'you'|'opponent'
+  const [draftMyPick, setDraftMyPick]   = useState(null)
+  const [draftResult, setDraftResult]   = useState(null)
+  const [draftMyDeck, setDraftMyDeck]   = useState([])
+  const [draftOppDeck, setDraftOppDeck] = useState([])
+  const [draftPhase, setDraftPhase]     = useState('reveal')  // reveal | pick | result
+  const [draftTimer, setDraftTimer]     = useState(20)
+  const [draftComplete, setDraftComplete] = useState(null)
+  const draftTimerRef = useRef(null)
 
   // Game state
   const [picksStatThisRound, setPicksStatThisRound] = useState(false)
@@ -49,15 +63,36 @@ export default function Battle({ token, participants = [], incomingChallenge, se
     return () => wsRef.current?.close()
   }, [])
 
-  function connectWs(id) {
+  function connectWs(id, mode = 'deck') {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const url = `${protocol}//${window.location.host}/ws/battle/${id}?token=${encodeURIComponent(token)}`
+    const url = `${protocol}//${window.location.host}/ws/battle/${id}?token=${encodeURIComponent(token)}&mode=${mode}`
     const ws = new WebSocket(url)
     wsRef.current = ws
 
     ws.onmessage = (e) => {
       const msg = JSON.parse(e.data)
       switch (msg.type) {
+        case 'draft_round_start':
+          setDraftRound(msg.round); setDraftCards(msg.cards)
+          setDraftClaimed({}); setDraftMyPick(null); setDraftResult(null)
+          setDraftPhase('reveal'); setScreen('draft')
+          setTimeout(() => setDraftPhase('pick'), 3200)
+          break
+
+        case 'draft_position_claimed':
+          setDraftClaimed(prev => ({ ...prev, [msg.position]: msg.by }))
+          if (msg.by === 'you') setDraftMyPick(msg.position)
+          break
+
+        case 'draft_round_result':
+          setDraftResult(msg); setDraftMyDeck(msg.your_deck_so_far); setDraftPhase('result')
+          break
+
+        case 'draft_complete':
+          setDraftComplete(msg); setDraftMyDeck(msg.your_cards); setDraftOppDeck(msg.opponent_cards)
+          setScreen('draft_complete')
+          break
+
         case 'waiting':
           setRoomId(msg.room_id); setScreen('waiting'); break
 
@@ -136,12 +171,37 @@ export default function Battle({ token, participants = [], incomingChallenge, se
     setError(null); connectWs(joinCode.trim().toUpperCase())
   }
 
-  async function challengePlayer(toUserId) {
+  async function challengePlayer(toUserId, mode = 'deck') {
     setError(null)
     const id = generateId()
-    await apiFetch('/api/challenges', token, { method: 'POST', body: JSON.stringify({ to_user_id: toUserId, room_id: id }) })
-    setRoomId(id); connectWs(id)
+    await apiFetch('/api/challenges', token, { method: 'POST', body: JSON.stringify({ to_user_id: toUserId, room_id: id, mode }) })
+    setRoomId(id); connectWs(id, mode)
   }
+
+  function draftPick(position) {
+    if (draftClaimed[position] || draftMyPick !== null) return
+    wsRef.current?.send(JSON.stringify({ type: 'draft_pick', position }))
+  }
+
+  useEffect(() => {
+    if (screen !== 'draft' || draftPhase !== 'pick') return
+    setDraftTimer(20)
+    clearInterval(draftTimerRef.current)
+    let t = 20
+    draftTimerRef.current = setInterval(() => {
+      t -= 1
+      setDraftTimer(t)
+      if (t <= 0) {
+        clearInterval(draftTimerRef.current)
+        // Auto-pick a random unclaimed position
+        const unclaimed = [0, 1, 2].filter(p => !draftClaimed[p])
+        if (unclaimed.length > 0 && draftMyPick === null) {
+          draftPick(unclaimed[Math.floor(Math.random() * unclaimed.length)])
+        }
+      }
+    }, 1000)
+    return () => clearInterval(draftTimerRef.current)
+  }, [draftPhase, screen])
 
   function sendReady() {
     if (!selectedDeck) return setError('Select a deck first')
@@ -188,10 +248,139 @@ export default function Battle({ token, participants = [], incomingChallenge, se
     setPickedCard(null); setMyStat(null); setOppStat(null)
     setScore({ you: 0, opponent: 0 }); setRound(null)
     setRematchRequested(false); setOpponentRequestedRematch(false); setError(null)
+    setDraftRound(0); setDraftCards([]); setDraftClaimed({}); setDraftMyPick(null)
+    setDraftResult(null); setDraftMyDeck([]); setDraftOppDeck([]); setDraftComplete(null)
+    clearInterval(draftTimerRef.current)
   }
 
   /* ── HOW TO PLAY MODAL ── */
   const howToPlayModal = showHowToPlay && <HowToPlayModal onClose={() => setShowHowToPlay(false)} battleFocus />
+
+  /* ── FANTASY DRAFT SCREENS ── */
+  const RARITY_COL = { Common: '#94a3b8', Uncommon: '#22c55e', Rare: '#f0c040' }
+
+  if (screen === 'draft') {
+    const totalRounds = 5
+
+    if (draftPhase === 'reveal' || draftPhase === 'pick') {
+      return (
+        <div style={{ position: 'fixed', inset: 0, background: '#050914', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 20, padding: '24px 16px' }}>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: 11, color: '#a855f7', fontWeight: 700, letterSpacing: 3, textTransform: 'uppercase' }}>Fantasy Draft</div>
+            <div style={{ fontSize: 20, fontWeight: 900, color: '#fff', fontFamily: "'Montserrat',sans-serif", marginTop: 4 }}>
+              Round {draftRound} / {totalRounds}
+            </div>
+            <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)', marginTop: 4 }}>
+              {draftPhase === 'reveal' ? 'Memorise these cards!' : draftMyPick !== null ? 'Waiting for opponent…' : `Pick one · ${draftTimer}s`}
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', gap: 16, justifyContent: 'center' }}>
+            {draftCards.map((card, i) => {
+              const claimed = draftClaimed[i]
+              const isMine = claimed === 'you'
+              const isOpp  = claimed === 'opponent'
+              return (
+                <div key={i} onClick={() => draftPhase === 'pick' && draftPick(i)} style={{ width: 100, cursor: draftPhase === 'pick' && !claimed ? 'pointer' : 'default', opacity: isOpp ? 0.5 : 1, transition: 'transform 0.15s', transform: !claimed && draftPhase === 'pick' ? 'scale(1)' : 'scale(1)' }}>
+                  {draftPhase === 'reveal' ? (
+                    <>
+                      <div style={{ borderRadius: 10, overflow: 'hidden', border: '2px solid rgba(168,85,247,0.3)' }}>
+                        {card.image_url
+                          ? <img src={card.image_url} alt={card.name} style={{ width: '100%', display: 'block' }} />
+                          : <div style={{ width: '100%', paddingBottom: '140%', background: '#1a2236', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
+                              <span style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', fontSize: 28 }}>⚽</span>
+                            </div>
+                        }
+                      </div>
+                      <div style={{ textAlign: 'center', marginTop: 5 }}>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: '#fff' }}>{card.name}</div>
+                        <div style={{ fontSize: 10, color: RARITY_COL[card.card_rarity] || '#fff' }}>{card.overall} OVR</div>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div style={{ borderRadius: 10, overflow: 'hidden', background: 'linear-gradient(135deg,#1e3a5f,#0f1f3d)', aspectRatio: '300/420', display: 'flex', alignItems: 'center', justifyContent: 'center', border: `2px solid ${isMine ? '#22c55e' : isOpp ? '#ef4444' : 'rgba(168,85,247,0.5)'}`, boxShadow: isMine ? '0 0 16px rgba(34,197,94,0.5)' : isOpp ? '0 0 16px rgba(239,68,68,0.4)' : 'none', animation: !claimed && draftPhase === 'pick' ? 'tutorialRing 1.4s ease infinite' : 'none' }}>
+                        {isMine ? <span style={{ fontSize: 28 }}>✓</span> : isOpp ? <span style={{ fontSize: 22 }}>✕</span> : <span style={{ fontSize: 36 }}>⚽</span>}
+                      </div>
+                      <div style={{ textAlign: 'center', marginTop: 5, fontSize: 11, fontWeight: 700, color: isMine ? '#22c55e' : isOpp ? '#ef4444' : 'rgba(255,255,255,0.4)' }}>
+                        {isMine ? 'Yours' : isOpp ? 'Taken' : `Card ${i + 1}`}
+                      </div>
+                    </>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+
+          {/* Timer bar */}
+          {draftPhase === 'pick' && draftMyPick === null && (
+            <div style={{ width: '100%', maxWidth: 340, height: 4, background: 'rgba(255,255,255,0.1)', borderRadius: 2 }}>
+              <div style={{ height: '100%', background: draftTimer > 10 ? '#a855f7' : draftTimer > 5 ? '#f0c040' : '#ef4444', borderRadius: 2, width: `${(draftTimer / 20) * 100}%`, transition: 'width 1s linear, background 0.3s' }} />
+            </div>
+          )}
+
+          {/* Accumulated deck */}
+          {draftMyDeck.length > 0 && (
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: 10, color: '#475569', letterSpacing: 2, marginBottom: 6 }}>YOUR PICKS SO FAR</div>
+              <div style={{ display: 'flex', gap: 6, justifyContent: 'center' }}>
+                {draftMyDeck.map((c, i) => (
+                  <div key={i} style={{ width: 40, borderRadius: 6, overflow: 'hidden' }}>
+                    {c.image_url ? <img src={c.image_url} style={{ width: '100%', display: 'block' }} /> : <div style={{ width: '100%', paddingBottom: '140%', background: '#1a2236' }} />}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )
+    }
+
+    if (draftPhase === 'result' && draftResult) {
+      return (
+        <div style={{ position: 'fixed', inset: 0, background: '#050914', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 20, padding: '24px 16px' }}>
+          <div style={{ fontSize: 11, color: '#a855f7', fontWeight: 700, letterSpacing: 3, textTransform: 'uppercase' }}>Round {draftResult.round} Result</div>
+          <div style={{ display: 'flex', gap: 32, alignItems: 'flex-start' }}>
+            {[['You got', draftResult.your_card, '#22c55e'], ['They got', draftResult.opponent_card, '#64748b']].map(([label, card, col]) => (
+              <div key={label} style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: 11, color: col, fontWeight: 700, marginBottom: 8, letterSpacing: 1 }}>{label}</div>
+                <div style={{ width: 110, borderRadius: 10, overflow: 'hidden', border: `2px solid ${col}`, boxShadow: `0 0 20px ${col}55` }}>
+                  {card.image_url ? <img src={card.image_url} style={{ width: '100%', display: 'block' }} /> : <div style={{ width: '100%', paddingBottom: '140%', background: '#1a2236' }} />}
+                </div>
+                <div style={{ marginTop: 6, fontSize: 12, fontWeight: 700, color: '#fff' }}>{card.name}</div>
+                <div style={{ fontSize: 11, color: RARITY_COL[card.card_rarity] || '#fff' }}>{card.overall} OVR</div>
+              </div>
+            ))}
+          </div>
+          <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.3)' }}>
+            {draftResult.round < 5 ? 'Next round coming…' : 'Final round done!'}
+          </div>
+        </div>
+      )
+    }
+  }
+
+  if (screen === 'draft_complete' && draftComplete) {
+    return (
+      <div style={{ position: 'fixed', inset: 0, background: '#050914', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 20, padding: '24px 16px' }}>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ fontSize: 11, color: '#a855f7', fontWeight: 700, letterSpacing: 3, textTransform: 'uppercase' }}>Draft Complete</div>
+          <div style={{ fontSize: 22, fontWeight: 900, color: '#fff', fontFamily: "'Montserrat',sans-serif", marginTop: 4 }}>Your Squad! 🏟️</div>
+        </div>
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap', maxWidth: 420 }}>
+          {draftComplete.your_cards.map((card, i) => (
+            <div key={i} className="anim-fadeUp" style={{ animationDelay: `${i * 0.1}s`, width: 72 }}>
+              <div style={{ borderRadius: 8, overflow: 'hidden', border: `1px solid ${RARITY_COL[card.card_rarity] || '#fff'}44`, boxShadow: `0 0 12px ${RARITY_COL[card.card_rarity] || '#f0c040'}44` }}>
+                {card.image_url ? <img src={card.image_url} style={{ width: '100%', display: 'block' }} /> : <div style={{ width: '100%', paddingBottom: '140%', background: '#1a2236' }} />}
+              </div>
+              <div style={{ textAlign: 'center', marginTop: 4, fontSize: 10, color: '#fff', fontWeight: 700 }}>{card.overall}</div>
+            </div>
+          ))}
+        </div>
+        <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)' }}>Battle starting…</div>
+      </div>
+    )
+  }
 
   /* ── VS SPLASH — must be first so it overlays any screen ── */
   if (showVS) return (
@@ -351,7 +540,7 @@ export default function Battle({ token, participants = [], incomingChallenge, se
               <div style={{ fontSize: 11, color: '#ffca45', fontWeight: 700, letterSpacing: '0.15em', flex: 1 }}>
                 CHALLENGING — {autoChallenge.name}
               </div>
-              <button onClick={() => { challengePlayer(autoChallenge.user_id); setAutoChallenge?.(null) }} style={{ ...L.challengeBtn, padding: '8px 16px', fontSize: 13 }}>
+              <button onClick={() => { challengePlayer(autoChallenge.user_id, autoChallenge.mode || 'deck'); setAutoChallenge?.(null) }} style={{ ...L.challengeBtn, padding: '8px 16px', fontSize: 13 }}>
                 ⚔ SEND CHALLENGE
               </button>
               <button onClick={() => setAutoChallenge?.(null)} style={{ background: 'transparent', border: 'none', color: '#475569', cursor: 'pointer', fontSize: 16, padding: 0 }}>✕</button>
@@ -362,21 +551,36 @@ export default function Battle({ token, participants = [], incomingChallenge, se
               <div style={L.sectionLabel}>OPPONENTS IN SESSION</div>
               <div style={{ flex: 1, overflowY: 'auto' }}>
                 {participants.map((p, i) => (
-                  <div key={p.user_id} className="challenge-row" style={{ ...L.opponentRow, animationDelay: `${i * 0.08}s` }}>
-                    <div style={L.opponentAvatar}>
-                      <img
-                        src={p.avatar ? `https://cdn.discordapp.com/avatars/${p.user_id}/${p.avatar}.png?size=64` : `https://cdn.discordapp.com/embed/avatars/0.png`}
-                        style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }}
-                        onError={e => { e.target.src = 'https://cdn.discordapp.com/embed/avatars/0.png' }}
-                      />
+                  <div key={p.user_id}>
+                    <div className="challenge-row" style={{ ...L.opponentRow, animationDelay: `${i * 0.08}s` }}>
+                      <div style={L.opponentAvatar}>
+                        <img
+                          src={p.avatar ? `https://cdn.discordapp.com/avatars/${p.user_id}/${p.avatar}.png?size=64` : `https://cdn.discordapp.com/embed/avatars/0.png`}
+                          style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }}
+                          onError={e => { e.target.src = 'https://cdn.discordapp.com/embed/avatars/0.png' }}
+                        />
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: 15, fontWeight: 700, color: '#fff' }}>{p.name}</div>
+                        <div style={{ fontSize: 11, color: '#4ade80', fontWeight: 600, letterSpacing: 0.5 }}>● ONLINE</div>
+                      </div>
+                      <button className="challenge-btn" onClick={() => setLobbyPickingMode(lobbyPickingMode?.user_id === p.user_id ? null : p)} style={{ ...L.challengeBtn, background: lobbyPickingMode?.user_id === p.user_id ? 'rgba(240,192,64,0.25)' : 'rgba(240,192,64,0.1)' }}>
+                        ⚔ CHALLENGE
+                      </button>
                     </div>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: 15, fontWeight: 700, color: '#fff' }}>{p.name}</div>
-                      <div style={{ fontSize: 11, color: '#4ade80', fontWeight: 600, letterSpacing: 0.5 }}>● ONLINE</div>
-                    </div>
-                    <button className="challenge-btn" onClick={() => challengePlayer(p.user_id)} style={L.challengeBtn}>
-                      ⚔ CHALLENGE
-                    </button>
+                    {lobbyPickingMode?.user_id === p.user_id && (
+                      <div className="anim-fadeUp" style={{ margin: '0 0 8px 60px', background: 'rgba(255,255,255,0.04)', borderRadius: 10, padding: '10px', border: '1px solid rgba(255,255,255,0.07)' }}>
+                        <div style={{ fontSize: 10, color: '#64748b', fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 8 }}>Choose mode:</div>
+                        <div style={{ display: 'flex', gap: 8 }}>
+                          <button onClick={() => { challengePlayer(p.user_id, 'draft'); setLobbyPickingMode(null) }} style={{ flex: 1, background: 'rgba(168,85,247,0.12)', border: '1px solid rgba(168,85,247,0.3)', borderRadius: 8, color: '#c4b5fd', padding: '8px', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+                            🎲 Fantasy Draft
+                          </button>
+                          <button onClick={() => { challengePlayer(p.user_id, 'deck'); setLobbyPickingMode(null) }} style={{ flex: 1, background: 'rgba(240,192,64,0.08)', border: '1px solid rgba(240,192,64,0.25)', borderRadius: 8, color: '#ffca45', padding: '8px', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+                            🃏 Use My Deck
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>

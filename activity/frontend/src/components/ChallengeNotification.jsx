@@ -6,8 +6,13 @@ export default function ChallengeNotification({ challenge, onAccept, onDecline }
       <div style={s.banner} className="anim-fadeUp">
         <div style={s.avatar}>⚔️</div>
         <div style={s.text}>
-          <div style={s.title}>Incoming Challenge!</div>
-          <div style={s.sub}><strong>{challenge.from_name}</strong> wants to battle</div>
+          <div style={s.title}>
+            {challenge.mode === 'draft' ? '🎲 Fantasy Draft Challenge!' : '⚔️ Incoming Challenge!'}
+          </div>
+          <div style={s.sub}>
+            <strong>{challenge.from_name}</strong>
+            {challenge.mode === 'draft' ? ' wants a Fantasy Draft' : ' wants to battle'}
+          </div>
         </div>
         <div style={s.actions}>
           <button style={s.acceptBtn} onClick={onAccept}>Accept</button>

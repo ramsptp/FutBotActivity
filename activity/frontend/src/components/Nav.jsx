@@ -16,8 +16,8 @@ export default function Nav({ page, setPage, participants = [], user, token, set
   const [showPanel, setShowPanel]       = useState(false)
   const [viewingProfile, setViewingProfile] = useState(null)
 
-  function handleChallenge(participant) {
-    setAutoChallenge?.(participant)
+  function handleChallenge(participant, mode = 'deck') {
+    setAutoChallenge?.({ ...participant, mode })
     setBattleMode?.('match')
     setPage('battle')
   }

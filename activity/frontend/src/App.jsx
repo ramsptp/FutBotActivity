@@ -102,7 +102,7 @@ function App() {
       minHeight: '100svh',
       background: "url('/background.png') center center / cover no-repeat fixed",
     } : undefined}>
-      {page === 'home' && <Home token={token} user={user} setPage={setPage} participants={participants} setBattleMode={setBattleMode} onStarterClaim={cards => { setStarterCards(cards); setTutorialStep(1); setPage('packs') }} tutorialStep={tutorialStep} onTutorialAdvance={advanceTutorial} onTutorialSkip={skipTutorial} />}
+      {page === 'home' && <Home token={token} user={user} setPage={setPage} participants={participants} setBattleMode={setBattleMode} onStarterClaim={cards => { setStarterCards(cards); setTutorialStep(1); setPage('packs') }} tutorialStep={tutorialStep} onTutorialAdvance={advanceTutorial} onTutorialSkip={skipTutorial} setAutoChallenge={setAutoChallenge} />}
       {page === 'collection' && <Collection token={token} />}
       {page === 'decks' && <DeckBuilder token={token} tutorialStep={tutorialStep} onTutorialAdvance={advanceTutorial} />}
       {page === 'packs' && <Packs token={token} starterCards={starterCards} onStarterDone={() => { setStarterCards(null); setPage('decks') }} tutorialStep={tutorialStep} onTutorialAdvance={advanceTutorial} />}

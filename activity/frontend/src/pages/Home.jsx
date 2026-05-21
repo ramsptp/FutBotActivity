@@ -23,7 +23,7 @@ const EMBERS = [
   { left: '92%', size: 5,  delay: '5s',  dur: '7s' },
 ]
 
-export default function Home({ token, user, setPage, participants = [], setBattleMode, onStarterClaim, tutorialStep = 0, onTutorialAdvance, onTutorialSkip }) {
+export default function Home({ token, user, setPage, participants = [], setBattleMode, onStarterClaim, tutorialStep = 0, onTutorialAdvance, onTutorialSkip, setAutoChallenge }) {
   const [player, setPlayer]             = useState(null)
   const [packs, setPacks]               = useState(null)
   const [showOnlinePanel, setShowOnlinePanel] = useState(false)
@@ -217,7 +217,7 @@ export default function Home({ token, user, setPage, participants = [], setBattl
               <OnlinePanel
                 user={user}
                 participants={participants}
-                onChallenge={() => { setBattleMode?.('match'); setPage('battle') }}
+                onChallenge={(p, mode) => { setAutoChallenge?.({ ...p, mode }); setBattleMode?.('match'); setPage('battle') }}
                 onClose={() => setShowOnlinePanel(false)}
                 onViewProfile={p => { setViewingProfile(p); setShowOnlinePanel(false) }}
               />

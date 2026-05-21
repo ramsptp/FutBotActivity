@@ -36,6 +36,21 @@ images_dir = get_images_dir()
 if images_dir:
     app.mount("/images", StaticFiles(directory=images_dir), name="images")
 
+# Serve fantasy draft card images
+def get_fantasy_images_dir():
+    db = get_db()
+    row = db.execute("SELECT image_path FROM fantasy_cards WHERE image_path IS NOT NULL LIMIT 1").fetchone()
+    if row:
+        import os
+        return os.path.dirname(row["image_path"])
+    return None
+
+fantasy_dir = get_fantasy_images_dir()
+if fantasy_dir:
+    import os
+    if os.path.isdir(fantasy_dir):
+        app.mount("/fantasy-images", StaticFiles(directory=fantasy_dir), name="fantasy-images")
+
 app.include_router(auth_router, prefix="/api")
 app.include_router(collection_router, prefix="/api")
 app.include_router(decks_router, prefix="/api")
