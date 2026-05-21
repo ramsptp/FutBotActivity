@@ -8,6 +8,7 @@ const PACK_META = {
   hero_pack:        { label: 'Hero Pack',          img: '/heropack.png', desc: '1 guaranteed Hero card' },
   tester_pack:      { label: 'Tester Pack',        img: null,            desc: '1 Icon + 4 high-rated cards' },
   starter_pack:     { label: 'Starter Pack',       img: null,            desc: '' },
+  mega_test_pack:   { label: 'Mega Test Pack',     img: null,            desc: '20 cards — top 10 revealed' },
 }
 
 function getCardColor(card) {
@@ -22,6 +23,11 @@ function getCardColor(card) {
     return { flash: 'rgba(240,192,64,0.55)', glow: '0 0 50px rgba(240,192,64,0.9), 0 0 100px rgba(240,192,64,0.45)' }
   }
   return { flash: 'rgba(240,192,64,0.45)', glow: '0 0 30px rgba(240,192,64,0.5)' }
+}
+
+function topForFan(cards) {
+  if (cards.length <= 10) return cards
+  return [...cards].sort((a, b) => b.overall - a.overall).slice(0, 10)
 }
 
 function calcValue(card) {
@@ -54,8 +60,9 @@ export default function Packs({ token, starterCards = null, onStarterDone = null
     setFlippedCards([])
     setLastFlipped(null)
     setScreen('fan')
-    preloadImages(starterCards.map(c => c.image_url)).then(() => {
-      setRevealedCards(starterCards)  // deal-in animation triggers once images are ready
+    const fanCards = topForFan(starterCards)
+    preloadImages(fanCards.map(c => c.image_url)).then(() => {
+      setRevealedCards(fanCards)  // deal-in animation triggers once images are ready
     })
   }, [starterCards])
 
@@ -82,8 +89,10 @@ export default function Packs({ token, starterCards = null, onStarterDone = null
     setLoading(true); setError(null)
     try {
       const cards = await apiFetch(`/api/packs/open/${packType}`, token, { method: 'POST' })
-      await preloadImages(cards.map(c => c.image_url))
-      setRevealedCards(cards)
+      const fanCards = topForFan(cards)
+      const displayCards = cards.length > 1 ? [...fanCards].sort(() => Math.random() - 0.5) : fanCards
+      await preloadImages(displayCards.map(c => c.image_url))
+      setRevealedCards(displayCards)
       setOpeningPack(packType)
       if (cards.length > 1) {
         setFlippedCards([])

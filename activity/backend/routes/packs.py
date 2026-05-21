@@ -95,11 +95,38 @@ def open_tester_pack(db, user_id: int):
     return cards
 
 
+def open_mega_test_pack(db, user_id: int):
+    cards = []
+    drawn_ids = set()
+
+    def draw(query, params=()):
+        for _ in range(200):
+            row = db.execute(query, params).fetchone()
+            if row and row["card_id"] not in drawn_ids:
+                drawn_ids.add(row["card_id"])
+                cards.append(row)
+                return True
+        return False
+
+    for _ in range(2):
+        draw("SELECT * FROM cards WHERE card_type = 'Icon' ORDER BY RANDOM() LIMIT 1")
+    for _ in range(3):
+        draw("SELECT * FROM cards WHERE card_type = 'Hero' ORDER BY RANDOM() LIMIT 1")
+    while len(cards) < 20:
+        if not draw("SELECT * FROM cards WHERE card_type = 'Standard' AND overall > 85 ORDER BY RANDOM() LIMIT 1"):
+            break
+
+    if not cards:
+        raise HTTPException(status_code=500, detail="Could not assemble mega test pack")
+    return cards
+
+
 PACK_OPENERS = {
     "rare_player_pack": open_rare_player_pack,
     "icon_pack": open_icon_pack,
     "hero_pack": open_hero_pack,
     "tester_pack": open_tester_pack,
+    "mega_test_pack": open_mega_test_pack,
 }
 
 
@@ -109,7 +136,7 @@ async def get_packs(discord_user=Depends(get_current_user)):
     db = get_db()
     row = db.execute("SELECT * FROM packs WHERE user_id = ?", (user_id,)).fetchone()
     if not row:
-        return {"rare_player_pack": 0, "icon_pack": 0, "hero_pack": 0, "tester_pack": 0}
+        return {"rare_player_pack": 0, "icon_pack": 0, "hero_pack": 0, "tester_pack": 0, "mega_test_pack": 0}
     d = dict(row)
     d.pop("user_id", None)
     return d
