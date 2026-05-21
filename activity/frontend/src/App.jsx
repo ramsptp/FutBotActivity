@@ -15,6 +15,7 @@ function App() {
   const [auth, setAuth] = useState(null)
   const [error, setError] = useState(null)
   const [page, setPage] = useState('home')
+  const [starterCards, setStarterCards] = useState(null)
   const [battleMode, setBattleMode] = useState('match') // 'match' | 'friend'
   const [autoChallenge, setAutoChallenge] = useState(null) // participant to auto-challenge
   const [participants, setParticipants] = useState([])
@@ -89,10 +90,10 @@ function App() {
       minHeight: '100svh',
       background: "url('/background.png') center center / cover no-repeat fixed",
     } : undefined}>
-      {page === 'home' && <Home token={token} user={user} setPage={setPage} participants={participants} setBattleMode={setBattleMode} />}
+      {page === 'home' && <Home token={token} user={user} setPage={setPage} participants={participants} setBattleMode={setBattleMode} onStarterClaim={cards => { setStarterCards(cards); setPage('packs') }} />}
       {page === 'collection' && <Collection token={token} />}
       {page === 'decks' && <DeckBuilder token={token} />}
-      {page === 'packs' && <Packs token={token} />}
+      {page === 'packs' && <Packs token={token} starterCards={starterCards} onStarterDone={() => { setStarterCards(null); setPage('decks') }} />}
       {page === 'shop' && <Shop token={token} />}
       {page === 'battle' && (
         <Battle

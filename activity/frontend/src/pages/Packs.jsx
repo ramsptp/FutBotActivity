@@ -7,6 +7,7 @@ const PACK_META = {
   icon_pack:        { label: 'Icon Pack',         img: '/iconpack.png', desc: '1 guaranteed Icon card' },
   hero_pack:        { label: 'Hero Pack',          img: '/heropack.png', desc: '1 guaranteed Hero card' },
   tester_pack:      { label: 'Tester Pack',        img: null,            desc: '1 Icon + 4 high-rated cards' },
+  starter_pack:     { label: 'Starter Pack',       img: null,            desc: '' },
 }
 
 function getCardColor(card) {
@@ -30,7 +31,7 @@ function calcValue(card) {
   return value
 }
 
-export default function Packs({ token }) {
+export default function Packs({ token, starterCards = null, onStarterDone = null }) {
   const [packs, setPacks]         = useState(null)
   const [screen, setScreen]       = useState('list')
   const [openingPack, setOpeningPack] = useState(null)
@@ -45,6 +46,18 @@ export default function Packs({ token }) {
   const [error, setError]         = useState(null)
 
   useEffect(() => { fetchPacks() }, [])
+
+  useEffect(() => {
+    if (!starterCards || starterCards.length === 0) return
+    // Switch to fan screen immediately so the dark bg shows — no visible Home flash
+    setOpeningPack('starter_pack')
+    setFlippedCards([])
+    setLastFlipped(null)
+    setScreen('fan')
+    preloadImages(starterCards.map(c => c.image_url)).then(() => {
+      setRevealedCards(starterCards)  // deal-in animation triggers once images are ready
+    })
+  }, [starterCards])
 
   // Restart animation sequence whenever a new card is shown
   useEffect(() => {
@@ -91,6 +104,11 @@ export default function Packs({ token }) {
     setTimeout(() => setLastFlipped(p => p === index ? null : p), 750)
   }
 
+  function revealAll() {
+    const unflipped = revealedCards.map((_, i) => i).filter(i => !flippedCards.includes(i))
+    unflipped.forEach((i, j) => setTimeout(() => flipCard(i), j * 70))
+  }
+
   function nextCard() {
     if (revealIndex < revealedCards.length - 1) {
       setRevealIndex(i => i + 1) // useEffect handles the animation reset
@@ -105,10 +123,10 @@ export default function Packs({ token }) {
     const flippedCount = flippedCards.length
     const allFlipped = flippedCount === total
     const packLabel = PACK_META[openingPack]?.label
-    const ROTS = [-5, 4, -3, 5, -2, 4, -4, 2, -5, 3, 3, -2]
+    const ROTS = [-8, 6, -11, 9, -5, 12, -7, 10, -9, 5, -12, 7, -6, 11, -4, 8]
 
     return (
-      <div style={{ position: 'fixed', inset: 0, background: '#050914', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 20, overflow: 'hidden', padding: '20px 12px' }}>
+      <div style={{ position: 'fixed', inset: 0, background: '#050914', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-start', gap: 20, overflowY: 'auto', padding: '32px 12px 110px' }}>
         <style>{`
           @keyframes dealIn {
             from { transform: translateY(80px) scale(0.72); opacity: 0; }
@@ -122,11 +140,43 @@ export default function Packs({ token }) {
           }
         `}</style>
 
-        <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)', letterSpacing: 2, textAlign: 'center' }}>
-          {packLabel} &nbsp;·&nbsp; {allFlipped ? 'All revealed!' : `Tap a card to reveal · ${flippedCount} / ${total}`}
-        </div>
+        {openingPack === 'starter_pack' ? (
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: 22, fontWeight: 900, color: '#fff', fontFamily: "'Montserrat', sans-serif", letterSpacing: 1 }}>Welcome to FutBot!</div>
+            {total > 0 && (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, marginTop: 6 }}>
+                <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)' }}>
+                  {allFlipped ? 'Your squad is ready!' : `Tap each card to reveal · ${flippedCount} / ${total}`}
+                </span>
+                {!allFlipped && (
+                  <button onClick={revealAll} style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.2)', borderRadius: 8, color: 'rgba(255,255,255,0.5)', padding: '3px 12px', fontSize: 12, cursor: 'pointer' }}>
+                    Reveal All
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        ) : (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)', letterSpacing: 2 }}>
+              {packLabel} &nbsp;·&nbsp; {allFlipped ? 'All revealed!' : `Tap a card to reveal · ${flippedCount} / ${total}`}
+            </span>
+            {!allFlipped && total > 0 && (
+              <button onClick={revealAll} style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.2)', borderRadius: 8, color: 'rgba(255,255,255,0.5)', padding: '3px 12px', fontSize: 12, cursor: 'pointer' }}>
+                Reveal All
+              </button>
+            )}
+          </div>
+        )}
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, width: '100%', maxWidth: 480 }}>
+        {total === 0 && (
+          <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', textAlign: 'center' }}>
+            <div style={{ fontSize: 18, fontWeight: 700, color: 'rgba(255,255,255,0.7)', marginBottom: 8 }}>Hold on tight…</div>
+            <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.3)' }}>Loading your starter pack</div>
+          </div>
+        )}
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 24, width: '100%', maxWidth: 600 }}>
           {revealedCards.map((card, i) => {
             const isFlipped = flippedCards.includes(i)
             const isLast = lastFlipped === i
@@ -164,12 +214,7 @@ export default function Packs({ token }) {
                     </div>
                   </div>
                 </div>
-                {isFlipped && (
-                  <div style={{ textAlign: 'center', marginTop: 4, fontSize: 10, color: { Common: '#94a3b8', Uncommon: '#22c55e', Rare: '#f0c040' }[card.card_rarity] || '#aaa', fontWeight: 600 }}>
-                    {card.card_rarity}
-                  </div>
-                )}
-              </div>
+                </div>
             )
           })}
         </div>
@@ -321,7 +366,8 @@ export default function Packs({ token }) {
     <ResultScreen
       cards={revealedCards}
       token={token}
-      onBack={() => setScreen('list')}
+      onBack={openingPack === 'starter_pack' && onStarterDone ? onStarterDone : () => setScreen('list')}
+      backLabel={openingPack === 'starter_pack' ? 'Build Your First Deck →' : 'Back to Packs'}
     />
   )
 
@@ -381,7 +427,7 @@ export default function Packs({ token }) {
   )
 }
 
-function ResultScreen({ cards, token, onBack }) {
+function ResultScreen({ cards, token, onBack, backLabel = 'Back to Packs' }) {
   const [sold, setSold]         = useState({})
   const [confirming, setConfirming] = useState(null) // card_id being confirmed
   const [toast, setToast]       = useState(null)
@@ -435,7 +481,7 @@ function ResultScreen({ cards, token, onBack }) {
           )
         })}
       </div>
-      <button className="btn-primary" onClick={onBack}>Back to Packs</button>
+      <button className="btn-primary" onClick={onBack}>{backLabel}</button>
     </div>
   )
 }

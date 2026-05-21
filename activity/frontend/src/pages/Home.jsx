@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
 import { apiFetch } from '../lib/api'
-import StarterPackModal from '../components/StarterPackModal'
 import OnlinePanel from '../components/OnlinePanel'
 import ProfileModal from '../components/ProfileModal'
 
@@ -22,10 +21,9 @@ const EMBERS = [
   { left: '92%', size: 5,  delay: '5s',  dur: '7s' },
 ]
 
-export default function Home({ token, user, setPage, participants = [], setBattleMode }) {
+export default function Home({ token, user, setPage, participants = [], setBattleMode, onStarterClaim }) {
   const [player, setPlayer]             = useState(null)
   const [packs, setPacks]               = useState(null)
-  const [starterCards, setStarterCards] = useState(null)
   const [showOnlinePanel, setShowOnlinePanel] = useState(false)
   const [showProfile, setShowProfile] = useState(false)
 
@@ -35,7 +33,7 @@ export default function Home({ token, user, setPage, participants = [], setBattl
       if (!data.player.has_claimed_starter_pack) {
         try {
           const cards = await apiFetch('/api/packs/starter', token, { method: 'POST' })
-          setStarterCards(cards)
+          onStarterClaim?.(cards)
         } catch {}
       }
     }).catch(() => {})
@@ -52,16 +50,6 @@ export default function Home({ token, user, setPage, participants = [], setBattl
           token={token}
           onClose={() => setShowProfile(false)}
           onTitleChange={title => setPlayer(p => ({ ...p, display_title: title || null }))}
-        />
-      )}
-
-      {starterCards && (
-        <StarterPackModal
-          cards={starterCards}
-          onClose={() => {
-            setStarterCards(null)
-            setPage('decks')
-          }}
         />
       )}
 
