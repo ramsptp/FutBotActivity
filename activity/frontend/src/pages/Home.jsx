@@ -3,6 +3,7 @@ import { apiFetch } from '../lib/api'
 import OnlinePanel from '../components/OnlinePanel'
 import ProfileModal from '../components/ProfileModal'
 import HowToPlayModal from '../components/HowToPlayModal'
+import SettingsModal from '../components/SettingsModal'
 import { toggleMute } from '../lib/sounds'
 
 const NAV = [
@@ -30,6 +31,7 @@ export default function Home({ token, user, setPage, participants = [], setBattl
   const [showProfile, setShowProfile] = useState(false)
   const [viewingProfile, setViewingProfile] = useState(null) // { user_id, name, avatar }
   const [showHowToPlay, setShowHowToPlay] = useState(false)
+  const [showSettings, setShowSettings] = useState(false)
   const [muted, setMuted] = useState(() => localStorage.getItem('futbot-muted') === 'true')
 
   useEffect(() => {
@@ -68,6 +70,7 @@ export default function Home({ token, user, setPage, participants = [], setBattl
       )}
 
       {showHowToPlay && <HowToPlayModal onClose={() => setShowHowToPlay(false)} />}
+      {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
 
       {/* Ember particles */}
       <div style={s.embers}>
@@ -129,7 +132,7 @@ export default function Home({ token, user, setPage, participants = [], setBattl
           </div>
 
           {/* Settings */}
-          <button style={s.settingsBtn}><span className="material-symbols-outlined" style={{ fontSize: 20, color: '#fff' }}>settings</span></button>
+          <button onClick={() => setShowSettings(true)} style={s.settingsBtn}><span className="material-symbols-outlined" style={{ fontSize: 20, color: '#fff' }}>settings</span></button>
         </div>
       </header>
 

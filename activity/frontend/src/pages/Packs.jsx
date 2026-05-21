@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import * as sfx from '../lib/sounds'
+import { getPackStyle } from '../components/SettingsModal'
 import { apiFetch, preloadImages } from '../lib/api'
 import FutCard from '../components/FutCard'
 import PageTip from '../components/PageTip'
@@ -73,6 +74,11 @@ export default function Packs({ token, starterCards = null, onStarterDone = null
   const openingTimers  = useRef([])
   const [statStep, setStatStep]   = useState(0)
   const [glowPhase, setGlowPhase] = useState('none')
+  const [layeredIndex, setLayeredIndex]   = useState(0)
+  const [layeredFlipped, setLayeredFlipped] = useState(false)
+  const [layeredShowCard, setLayeredShowCard] = useState(null)
+  const [layeredFinalActive, setLayeredFinalActive] = useState(false)
+  const [layeredDealing, setLayeredDealing] = useState(false) // brief lock during deal animation
   const [loading, setLoading]     = useState(false)
   const [error, setError]         = useState(null)
 
@@ -87,8 +93,19 @@ export default function Packs({ token, starterCards = null, onStarterDone = null
     setScreen('fan')
     const fanCards = topForFan(starterCards)
     preloadImages(fanCards.map(c => c.image_url)).then(() => {
-      setRevealedCards(fanCards)
+      const style = getPackStyle()
       setFeaturedIndex(pickFeaturedIndex(fanCards))
+      if (style === 'layered') {
+        const sorted = [...fanCards].sort((a, b) => a.overall - b.overall)
+        setRevealedCards(sorted)
+        setLayeredIndex(0); setLayeredFlipped(false); setLayeredShowCard(null); setLayeredFinalActive(false); setLayeredDealing(false)
+        setScreen('layered')
+      } else if (style === 'quick') {
+        setRevealedCards(fanCards)
+        setScreen('quick')
+      } else {
+        setRevealedCards(fanCards)
+      }
     })
   }, [starterCards])
 
@@ -134,7 +151,18 @@ export default function Packs({ token, starterCards = null, onStarterDone = null
         setFlippedCards([])
         setLastFlipped(null)
         setFeaturedIndex(pickFeaturedIndex(displayCards))
-        setScreen('fan')
+        const style = getPackStyle()
+        if (style === 'quick') {
+          setScreen('quick')
+        } else if (style === 'layered') {
+          // Sort ascending OVR for layered peel (worst first, best last)
+          const sorted = [...displayCards].sort((a, b) => a.overall - b.overall)
+          setRevealedCards(sorted)
+          setLayeredIndex(0); setLayeredFlipped(false); setLayeredShowCard(null); setLayeredFinalActive(false); setLayeredDealing(false)
+          setScreen('layered')
+        } else {
+          setScreen('fan')
+        }
       } else {
         setRevealIndex(0)
         setScreen('opening')
@@ -202,6 +230,229 @@ export default function Packs({ token, starterCards = null, onStarterDone = null
     setFlipped(true)
     setGlowPhase('cycle')
     setShineActive(false)
+  }
+
+  /* ── QUICK REVEAL ── */
+  if (screen === 'quick') {
+    const featCard = revealedCards[featuredIndex ?? 0]
+    if (!featCard) return null
+    const { glow: qGlow, flash: qFlash } = getCardColor(featCard)
+    const qRgb = qFlash.match(/rgba?\((\d+,\s*\d+,\s*\d+)/)?.[1] || '240,192,64'
+    const qDs = qGlow.split(', ').map(s => { const m = s.match(/rgba?\([^)]+\)/); const p = s.trim().split(/\s+/); return `drop-shadow(0 0 ${p[2]||'20px'} ${m?.[0]||'gold'})` }).join(' ')
+    const qPulse = (qGlow.match(/rgba?\([^)]+\)/)?.[0]||'rgba(240,192,64,0.5)').replace(/[\d.]+\)$/, '0.65)')
+    const qDim = (qGlow.match(/rgba?\([^)]+\)/)?.[0]||'rgba(240,192,64,0.3)').replace(/[\d.]+\)$/, '0.3)')
+    return (
+      <div style={{ position: 'fixed', inset: 0, background: '#050914', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 20, overflow: 'hidden' }}>
+        <style>{`
+          @keyframes packShake { 0%{transform:translateY(0) rotate(0deg) scale(1)}15%{transform:translateY(-6px) rotate(-2deg) scale(1.02)}30%{transform:translateY(0) rotate(2deg) scale(1)}45%{transform:translateY(-6px) rotate(-1.5deg) scale(1.03)}60%{transform:translateY(0) rotate(1.5deg) scale(1)}75%{transform:translateY(-10px) rotate(0deg) scale(1.05)}90%{transform:translateY(-30px) scale(1.08);opacity:0.6}100%{transform:translateY(-80px) scale(0.7);opacity:0} }
+          @keyframes flashBurst { 0%{opacity:0}25%{opacity:1}100%{opacity:0} }
+          @keyframes cardEntrance { from{transform:translateY(40px) scale(0.9);opacity:0}to{transform:translateY(0) scale(1);opacity:1} }
+          @keyframes shineSweep { 0%{left:-60%;opacity:0}10%{opacity:0.7}90%{opacity:0.7}100%{left:130%;opacity:0} }
+          @keyframes statIn { 0%{transform:scale(0.4) translateY(16px);opacity:0;filter:brightness(5)}60%{filter:brightness(1.6)}100%{transform:scale(1) translateY(0);opacity:1;filter:brightness(1)} }
+          @keyframes ovrIn { 0%{transform:scale(0.15);opacity:0;filter:brightness(10) blur(8px)}50%{filter:brightness(3) blur(0px)}100%{transform:scale(1);opacity:1;filter:brightness(1)} }
+          @keyframes ovrGlow { 0%,100%{text-shadow:0 0 20px rgba(240,192,64,0.6)}50%{text-shadow:0 0 50px rgba(240,192,64,1),0 0 80px rgba(240,192,64,0.5)} }
+          @keyframes backPulse { 0%,100%{box-shadow:0 0 20px rgba(${qRgb},0.4)}50%{box-shadow:0 0 50px rgba(${qRgb},0.9),0 0 80px rgba(${qRgb},0.3)} }
+          @keyframes glowReveal { from{filter:none}to{filter:${qDs} } }
+          @keyframes glowEntry { from{filter:${qDs} drop-shadow(0 0 50px ${qPulse})}to{filter:${qDs}} }
+          @keyframes glowCycle { 0%,100%{filter:${qDs}}55%{filter:drop-shadow(0 0 14px ${qDim})} }
+          @keyframes seeAllPulse { 0%,100%{box-shadow:0 4px 20px rgba(168,85,247,0.45);transform:scale(1)}50%{box-shadow:0 4px 32px rgba(168,85,247,0.9);transform:scale(1.07)} }
+        `}</style>
+        {/* Reuse full single-card EA FC reveal for featured card, then auto-go to result */}
+        <QuickRevealInner
+          card={featCard} packImg={PACK_META[openingPack]?.img} packLabel={PACK_META[openingPack]?.label}
+          onDone={() => setScreen('result')}
+          openingPack={openingPack} onStarterDone={onStarterDone} tutorialStep={tutorialStep} onTutorialAdvance={onTutorialAdvance}
+        />
+      </div>
+    )
+  }
+
+  /* ── LAYERED PEEL ── */
+  if (screen === 'layered') {
+    const packLabel = PACK_META[openingPack]?.label
+    const totalCards = revealedCards.length
+    const currentCard = revealedCards[layeredIndex]
+    if (!currentCard) return null
+    const isLast = layeredIndex === totalCards - 1
+    const dealingCard = layeredShowCard
+    const RARITY_COL = { Common: '#94a3b8', Uncommon: '#22c55e', Rare: '#f0c040' }
+
+    // Phase 3: EA FC full reveal for last card — replace entire screen
+    if (layeredFinalActive) {
+      return (
+        <div style={{ position: 'fixed', inset: 0, background: '#050914', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 20, overflow: 'hidden' }}>
+          <button
+            onClick={() => setScreen('result')}
+            style={{ position: 'absolute', top: 16, right: 16, background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: 20, color: 'rgba(255,255,255,0.5)', padding: '5px 16px', fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap', zIndex: 50 }}
+          >
+            Skip →
+          </button>
+          <QuickRevealInner card={currentCard} packImg={null} packLabel={packLabel}
+            onDone={() => setScreen('result')} openingPack={openingPack}
+            onStarterDone={onStarterDone} tutorialStep={tutorialStep} onTutorialAdvance={onTutorialAdvance} />
+        </div>
+      )
+    }
+
+    // Two-pile dealing layout
+    const revealedPile = revealedCards.slice(0, layeredIndex)
+    const remainingPile = revealedCards.slice(layeredIndex)
+    const remainingDisplay = dealingCard ? remainingPile.slice(1) : remainingPile
+
+    return (
+      <div style={{ position: 'fixed', inset: 0, background: '#050914', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 24, overflow: 'hidden' }}>
+        <style>{`
+          @keyframes dealFlyCombo {
+            0%   { transform: translateX(0) rotateY(180deg) scale(1); opacity: 1; }
+            45%  { transform: translateX(-120px) rotateY(90deg) scale(0.93); opacity: 1; }
+            85%  { transform: translateX(-215px) rotateY(0deg) scale(0.88); opacity: 0.55; }
+            100% { transform: translateX(-235px) rotateY(0deg) scale(0.85); opacity: 0; }
+          }
+          @keyframes cardAppear {
+            from { opacity: 0; transform: scale(0.86); }
+            to   { opacity: 1; transform: scale(1); }
+          }
+          @keyframes lastGlow {
+            0%,100% { box-shadow: 0 0 0 2px rgba(240,192,64,0.5), 0 0 20px rgba(240,192,64,0.35); }
+            50%     { box-shadow: 0 0 0 2px rgba(240,192,64,0.95), 0 0 45px rgba(240,192,64,0.8); }
+          }
+        `}</style>
+
+        {/* Header */}
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ fontSize: 11, color: '#a855f7', fontWeight: 700, letterSpacing: 3, textTransform: 'uppercase' }}>{packLabel}</div>
+          <div style={{ fontSize: 14, color: 'rgba(255,255,255,0.45)', marginTop: 6 }}>
+            <span style={{ color: '#fff', fontWeight: 700 }}>{layeredIndex}</span>
+            {' / '}{totalCards}{' revealed'}
+          </div>
+        </div>
+
+        {/* Two piles */}
+        <div style={{ display: 'flex', gap: 40, alignItems: 'flex-end', justifyContent: 'center' }}>
+
+          {/* LEFT: revealed face-up */}
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+            <div style={{ position: 'relative', width: 175, height: 245 }}>
+              {revealedPile.length === 0 ? (
+                <div style={{ width: '100%', height: '100%', borderRadius: 12, border: '2px dashed rgba(255,255,255,0.07)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <span style={{ fontSize: 30, opacity: 0.12 }}>🂠</span>
+                </div>
+              ) : (
+                revealedPile.slice(-3).map((c, stackI, arr) => {
+                  const isTopCard = stackI === arr.length - 1
+                  const depthOffset = (arr.length - 1 - stackI) * 5
+                  const rarityColor = RARITY_COL[c.card_rarity] || '#f0c040'
+                  return (
+                    <div key={`rev-${c.card_id}`} style={{
+                      position: 'absolute', top: 0, left: 0, width: '100%',
+                      transform: `translateY(${depthOffset}px) translateZ(0)`,
+                      zIndex: stackI + 1,
+                      animation: isTopCard ? 'cardAppear 0.3s ease both' : 'none',
+                      backfaceVisibility: 'hidden',
+                      WebkitBackfaceVisibility: 'hidden',
+                      filter: isTopCard ? `drop-shadow(0 0 10px ${rarityColor}99) drop-shadow(0 4px 20px ${rarityColor}55)` : 'none',
+                    }}>
+                      <FutCard card={c} />
+                    </div>
+                  )
+                })
+              )}
+            </div>
+            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.28)', minHeight: 16 }}>
+              {revealedPile.length > 0 && `${revealedPile.length} card${revealedPile.length !== 1 ? 's' : ''}`}
+            </div>
+          </div>
+
+          {/* RIGHT: remaining face-down */}
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+            <div
+              onClick={() => {
+                if (layeredDealing) return
+                sfx.cardFlip()
+                sfx.dramaticReveal(currentCard.card_rarity, currentCard.card_type)
+                if (isLast) {
+                  setLayeredFinalActive(true)
+                } else {
+                  setLayeredDealing(true)
+                  setLayeredShowCard(currentCard)
+                  setTimeout(() => {
+                    setLayeredIndex(i => i + 1)
+                    setLayeredShowCard(null)
+                    setLayeredDealing(false)
+                  }, 450)
+                }
+              }}
+              style={{
+                position: 'relative', width: 175, height: 245,
+                cursor: layeredDealing ? 'default' : 'pointer',
+                borderRadius: 12,
+                animation: isLast && !layeredDealing ? 'lastGlow 1.4s ease infinite' : 'none',
+              }}
+            >
+              {/* Flying card: starts face-down at right pile, flips face-up as it slides left */}
+              {dealingCard && (
+                <div style={{ position: 'absolute', inset: 0, zIndex: 20, perspective: 600, pointerEvents: 'none' }}>
+                  <div style={{
+                    width: '100%', height: '100%',
+                    transformStyle: 'preserve-3d',
+                    animation: 'dealFlyCombo 0.45s ease forwards',
+                    position: 'relative',
+                  }}>
+                    <div style={{ position: 'absolute', top: 0, left: 0, right: 0, backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden', transform: 'translateZ(0)' }}>
+                      <FutCard card={dealingCard} />
+                    </div>
+                    <div style={{ position: 'absolute', inset: 0, transform: 'rotateY(180deg)', background: 'linear-gradient(135deg,#1e3a5f,#0f1f3d)', borderRadius: 10, backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <span style={{ fontSize: 36 }}>⚽</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Face-down stack (hides top card while it flies) */}
+              {remainingDisplay.length === 0 ? (
+                <div style={{ width: '100%', height: '100%', borderRadius: 12, border: '2px dashed rgba(255,255,255,0.07)', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0.3 }}>
+                  <span style={{ fontSize: 28 }}>✓</span>
+                </div>
+              ) : (
+                remainingDisplay.slice(0, 4).map((_, i) => {
+                  const stackCount = Math.min(4, remainingDisplay.length)
+                  const depth = stackCount - 1 - i
+                  const isTopCard = depth === 0
+                  return (
+                    <div key={`rem-${layeredIndex}-${i}`} style={{
+                      position: 'absolute', inset: 0,
+                      transform: `translateY(${depth * 6}px) scale(${1 - depth * 0.025})`,
+                      zIndex: stackCount - depth,
+                      borderRadius: 12, overflow: 'hidden',
+                      background: 'linear-gradient(135deg,#1e3a5f,#0f1f3d)',
+                      border: isTopCard
+                        ? (isLast ? '2px solid rgba(240,192,64,0.8)' : '2px solid rgba(168,85,247,0.4)')
+                        : '1px solid rgba(255,255,255,0.05)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    }}>
+                      <span style={{ fontSize: isTopCard ? 44 : 28, opacity: isTopCard ? 0.85 : 0.3 }}>⚽</span>
+                    </div>
+                  )
+                })
+              )}
+            </div>
+            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.28)', minHeight: 16 }}>
+              {remainingDisplay.length > 0 && `${remainingDisplay.length} card${remainingDisplay.length !== 1 ? 's' : ''}`}
+            </div>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div style={{ textAlign: 'center' }}>
+          {isLast
+            ? <div style={{ fontSize: 14, fontWeight: 700, color: '#f0c040', letterSpacing: 1 }}>⭐ Last Card — Tap to reveal!</div>
+            : layeredDealing
+              ? <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.2)' }}>Dealing…</div>
+              : <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.35)' }}>Tap the pile to deal next card</div>
+          }
+        </div>
+      </div>
+    )
   }
 
   /* ── FAN REVEAL (multi-card packs) ── */
@@ -560,12 +811,9 @@ export default function Packs({ token, starterCards = null, onStarterDone = null
         </div>
 
         {/* SHAKE PHASE — pack image */}
-        {phase === 'shake' && (
+        {phase === 'shake' && packImg && (
           <div style={{ width: 200, animation: 'packShake 0.9s ease forwards' }}>
-            {packImg
-              ? <img src={packImg} style={{ width: '100%', height: 'auto', display: 'block' }} />
-              : <div style={{ fontSize: 80, textAlign: 'center' }}>📦</div>
-            }
+            <img src={packImg} style={{ width: '100%', height: 'auto', display: 'block' }} />
           </div>
         )}
 
@@ -737,6 +985,100 @@ export default function Packs({ token, starterCards = null, onStarterDone = null
         })()}
     </div>
   )
+}
+
+// ── Quick Reveal: runs the full single-card EA FC animation for the featured card, then calls onDone ──
+function QuickRevealInner({ card, packImg, packLabel, onDone, openingPack, onStarterDone, tutorialStep, onTutorialAdvance }) {
+  const [phase, setPhase]         = useState('shake')
+  const [flipped, setFlipped]     = useState(false)
+  const [shineActive, setShineActive] = useState(false)
+  const [statStep, setStatStep]   = useState(0)
+  const [glowPhase, setGlowPhase] = useState('none')
+  const timers = useRef([])
+
+  const { glow, flash: flashColor } = getCardColor(card)
+  const rgbBase = flashColor.match(/rgba?\((\d+,\s*\d+,\s*\d+)/)?.[1] || '88,101,242'
+  const dropShadow = glow.split(', ').map(s => { const m = s.match(/rgba?\([^)]+\)/); const p = s.trim().split(/\s+/); return `drop-shadow(0 0 ${p[2]||'20px'} ${m?.[0]||'gold'})` }).join(' ')
+  const pulseColor = (glow.match(/rgba?\([^)]+\)/)?.[0]||'rgba(240,192,64,0.5)').replace(/[\d.]+\)$/, '0.65)')
+  const pulseDS = `${dropShadow} drop-shadow(0 0 50px ${pulseColor})`
+  const dimColor = (glow.match(/rgba?\([^)]+\)/)?.[0]||'rgba(240,192,64,0.3)').replace(/[\d.]+\)$/, '0.3)')
+  const dimDS = `drop-shadow(0 0 14px ${dimColor})`
+
+  useEffect(() => {
+    import('../lib/sounds').then(sfx => { sfx.packShake() })
+    const ts = [
+      setTimeout(() => setPhase('flash'), 900),
+      setTimeout(() => setPhase('stats'), 1200),
+      setTimeout(() => { setStatStep(1); import('../lib/sounds').then(s => s.statReveal(1)) }, 1800),
+      setTimeout(() => { setStatStep(2); import('../lib/sounds').then(s => s.statReveal(2)) }, 2700),
+      setTimeout(() => { setStatStep(3); import('../lib/sounds').then(s => s.statReveal(3)) }, 3500),
+      setTimeout(() => { setStatStep(4); import('../lib/sounds').then(s => s.statReveal(4)) }, 4300),
+      setTimeout(() => { setStatStep(5); import('../lib/sounds').then(s => s.statReveal(5)) }, 5300),
+      setTimeout(() => { setFlipped(true); setGlowPhase('reveal'); import('../lib/sounds').then(s => { s.cardFlip(); s.dramaticReveal(card.card_rarity, card.card_type) }) }, 6400),
+      setTimeout(() => { setShineActive(true); import('../lib/sounds').then(s => s.shineSweep()) }, 7000),
+      setTimeout(() => { setShineActive(false); setGlowPhase('entry') }, 7700),
+      setTimeout(() => setGlowPhase('cycle'), 8700),
+      setTimeout(() => onDone(), 10500),
+    ]
+    timers.current = ts
+    return () => ts.forEach(clearTimeout)
+  }, [])
+
+  const RARITY_COL = { Common: '#94a3b8', Uncommon: '#22c55e', Rare: '#f0c040' }
+  const glowAnim = glowPhase === 'reveal' ? 'glowReveal 0.6s cubic-bezier(0.4,0,0.2,1) forwards'
+    : glowPhase === 'entry' ? 'glowEntry 1.0s ease forwards'
+    : glowPhase === 'cycle' ? 'glowCycle 3.5s ease infinite' : 'none'
+
+  return (
+    <>
+      <style>{`
+        @keyframes packShake2{0%{transform:translateY(0) rotate(0deg) scale(1)}15%{transform:translateY(-6px) rotate(-2deg) scale(1.02)}30%{transform:translateY(0) rotate(2deg) scale(1)}45%{transform:translateY(-6px) rotate(-1.5deg) scale(1.03)}60%{transform:translateY(0) rotate(1.5deg) scale(1)}75%{transform:translateY(-10px) rotate(0deg) scale(1.05)}90%{transform:translateY(-30px) scale(1.08);opacity:0.6}100%{transform:translateY(-80px) scale(0.7);opacity:0}}
+        @keyframes flashBurst2{0%{opacity:0}25%{opacity:1}100%{opacity:0}}
+        @keyframes cardEntrance2{from{transform:translateY(40px) scale(0.9);opacity:0}to{transform:translateY(0) scale(1);opacity:1}}
+        @keyframes shineSweep2{0%{left:-60%;opacity:0}10%{opacity:0.7}90%{opacity:0.7}100%{left:130%;opacity:0}}
+        @keyframes statIn2{0%{transform:scale(0.4) translateY(16px);opacity:0;filter:brightness(5)}60%{filter:brightness(1.6)}100%{transform:scale(1) translateY(0);opacity:1;filter:brightness(1)}}
+        @keyframes ovrIn2{0%{transform:scale(0.15);opacity:0;filter:brightness(10) blur(8px)}50%{filter:brightness(3) blur(0px)}100%{transform:scale(1);opacity:1;filter:brightness(1)}}
+        @keyframes ovrGlow2{0%,100%{text-shadow:0 0 20px rgba(240,192,64,0.6)}50%{text-shadow:0 0 50px rgba(240,192,64,1),0 0 80px rgba(240,192,64,0.5)}}
+        @keyframes backPulse2{0%,100%{box-shadow:0 0 20px rgba(${rgbBase},0.4)}50%{box-shadow:0 0 50px rgba(${rgbBase},0.9),0 0 80px rgba(${rgbBase},0.3)}}
+        @keyframes glowReveal{from{filter:none}to{filter:${pulseDS}}}
+        @keyframes glowEntry{from{filter:${pulseDS}}to{filter:${dropShadow}}}
+        @keyframes glowCycle{0%,100%{filter:${dropShadow}}55%{filter:${dimDS}}}
+      `}</style>
+      {phase === 'flash' && <div style={{ position:'fixed', inset:0, background: flashColor, animation:'flashBurst2 0.3s ease forwards', pointerEvents:'none', zIndex:10 }} />}
+      {phase === 'shake' && packImg && <div style={{ width:200, animation:'packShake2 0.9s ease forwards' }}><img src={packImg} style={{width:'100%',height:'auto',display:'block'}}/></div>}
+      {(phase === 'stats' || phase === 'flash') && (
+        <>
+          {!flipped && <div style={{position:'fixed',inset:0,background:`radial-gradient(ellipse at 50% 42%, ${flashColor.replace(/[\d.]+\)$/,'0.13)')}, transparent 65%)`,pointerEvents:'none'}} />}
+          <div style={{width:220,perspective:900,animation:phase==='stats'?'cardEntrance2 0.4s ease both':'none'}}>
+            <div style={{width:'100%',transformStyle:'preserve-3d',position:'relative',transition:'transform 0.6s cubic-bezier(0.4,0,0.2,1)',transform:flipped?'rotateY(0deg)':'rotateY(180deg)',borderRadius:10,animation:!flipped&&phase==='stats'?'backPulse2 0.8s ease infinite':'none'}}>
+              <div style={{backfaceVisibility:'hidden',WebkitBackfaceVisibility:'hidden',borderRadius:10,overflow:'hidden',position:'relative',animation:glowAnim}}>
+                <FutCard card={card}/>
+                {shineActive && <div style={{position:'absolute',top:0,bottom:0,width:'45%',background:'linear-gradient(to right,transparent,rgba(255,255,255,0.55),transparent)',transform:'skewX(-12deg)',animation:'shineSweep2 0.65s ease forwards',pointerEvents:'none'}}/>}
+              </div>
+              <div style={{position:'absolute',inset:0,backfaceVisibility:'hidden',WebkitBackfaceVisibility:'hidden',transform:'rotateY(180deg)',background:'linear-gradient(135deg,#1e3a5f,#0f1f3d)',borderRadius:10,display:'flex',alignItems:'center',justifyContent:'center'}}><span style={{fontSize:40}}>⚽</span></div>
+            </div>
+          </div>
+          {!flipped && statStep > 0 && (
+            <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:18}}>
+              {statStep >= 1 && <div style={{textAlign:'center',animation:'statIn2 0.4s cubic-bezier(0.34,1.56,0.64,1) both'}}><div style={{fontSize:13,fontWeight:800,letterSpacing:4,color:{Common:'#94a3b8',Uncommon:'#22c55e',Rare:'#f0c040'}[card.card_rarity]||'#fff',textTransform:'uppercase',filter:'drop-shadow(0 0 8px currentColor)'}}>{card.card_rarity} · {card.card_type}</div></div>}
+              <div style={{display:'flex',gap:36,alignItems:'flex-end'}}>
+                {statStep>=2&&<div style={{textAlign:'center',animation:'statIn2 0.4s cubic-bezier(0.34,1.56,0.64,1) both'}}><div style={{fontSize:40,fontWeight:900,color:'#ef4444',lineHeight:1,filter:'drop-shadow(0 0 10px rgba(239,68,68,0.7))'}}>{card.attack}</div><div style={{fontSize:10,color:'rgba(255,255,255,0.4)',letterSpacing:2,marginTop:4}}>ATK</div></div>}
+                {statStep>=3&&<div style={{textAlign:'center',animation:'statIn2 0.4s cubic-bezier(0.34,1.56,0.64,1) both'}}><div style={{fontSize:40,fontWeight:900,color:'#3b82f6',lineHeight:1,filter:'drop-shadow(0 0 10px rgba(59,130,246,0.7))'}}>{card.defense}</div><div style={{fontSize:10,color:'rgba(255,255,255,0.4)',letterSpacing:2,marginTop:4}}>DEF</div></div>}
+                {statStep>=4&&<div style={{textAlign:'center',animation:'statIn2 0.4s cubic-bezier(0.34,1.56,0.64,1) both'}}><div style={{fontSize:40,fontWeight:900,color:'#22c55e',lineHeight:1,filter:'drop-shadow(0 0 10px rgba(34,197,94,0.7))'}}>{card.speed}</div><div style={{fontSize:10,color:'rgba(255,255,255,0.4)',letterSpacing:2,marginTop:4}}>SPD</div></div>}
+              </div>
+              {statStep>=5&&<div style={{textAlign:'center',animation:'ovrIn2 0.55s cubic-bezier(0.34,1.56,0.64,1) both'}}><div style={{fontSize:76,fontWeight:900,color:'#f0c040',lineHeight:1,animation:'ovrGlow2 1.2s ease infinite',letterSpacing:-2}}>{card.overall}</div><div style={{fontSize:11,color:'rgba(255,255,255,0.4)',letterSpacing:4,marginTop:4}}>OVERALL</div></div>}
+            </div>
+          )}
+          {flipped && <div className="anim-fadeUp" style={{textAlign:'center'}}><div style={{fontSize:20,fontWeight:700,color:'#fff'}}>{card.name}</div><div style={{fontSize:13,margin:'4px 0 8px',color:RARITY_COL[card.card_rarity]||'#fff',fontWeight:600}}>{card.card_rarity} · {card.card_type}</div><div style={{fontSize:12,color:'rgba(255,255,255,0.3)'}}>Going to your cards…</div></div>}
+        </>
+      )}
+    </>
+  )
+}
+
+// ── Layered Final Reveal: once last card is tapped, play full EA FC animation ──
+function LayeredFinalReveal({ card, onDone, packLabel, openingPack, onStarterDone, tutorialStep, onTutorialAdvance, revealedCards }) {
+  return <QuickRevealInner card={card} packImg={null} packLabel={packLabel} onDone={onDone} openingPack={openingPack} onStarterDone={onStarterDone} tutorialStep={tutorialStep} onTutorialAdvance={onTutorialAdvance} />
 }
 
 function ResultScreen({ cards, token, onBack, backLabel = 'Back to Packs', isStarter = false, tutorialStep = 0 }) {
