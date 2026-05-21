@@ -19,7 +19,7 @@ export default function Nav({ page, setPage, participants = [], user }) {
               <button
                 key={tab.id}
                 onClick={() => setPage(tab.id)}
-                style={{ ...s.item, color: active ? '#ffca45' : 'rgba(255,255,255,0.45)' }}
+                style={{ ...s.item, color: active ? '#ffca45' : 'rgba(255,255,255,0.9)' }}
               >
                 <span className="material-symbols-outlined" style={{ fontSize: 20, fontVariationSettings: active ? "'FILL' 1" : "'FILL' 0" }}>{tab.icon}</span>
                 <span style={{ ...s.label, fontWeight: active ? 700 : 400 }}>{tab.label}</span>
