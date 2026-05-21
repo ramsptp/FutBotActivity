@@ -3,10 +3,10 @@ import { apiFetch, preloadImages } from '../lib/api'
 import FutCard from '../components/FutCard'
 
 const PACK_META = {
-  rare_player_pack: { label: 'Rare Player Pack', icon: '🌟', desc: '1 Rare or Special card (85+ OVR)' },
-  icon_pack:        { label: 'Icon Pack',         icon: '👑', desc: '1 guaranteed Icon card' },
-  hero_pack:        { label: 'Hero Pack',          icon: '🦸', desc: '1 guaranteed Hero card' },
-  tester_pack:      { label: 'Tester Pack',        icon: '💎', desc: '1 Icon + 4 high-rated cards' },
+  rare_player_pack: { label: 'Rare Player Pack', img: '/rarepack.png', desc: '1 Rare or Special card (85+ OVR)' },
+  icon_pack:        { label: 'Icon Pack',         img: '/iconpack.png', desc: '1 guaranteed Icon card' },
+  hero_pack:        { label: 'Hero Pack',          img: '/heropack.png', desc: '1 guaranteed Hero card' },
+  tester_pack:      { label: 'Tester Pack',        img: null,            desc: '1 Icon + 4 high-rated cards' },
 }
 
 export default function Packs({ token }) {
@@ -131,7 +131,7 @@ export default function Packs({ token }) {
   /* ── PACK LIST ── */
   return (
     <div className="page">
-      <h2 style={{ color: '#fff', fontWeight: 700, fontSize: 20, marginBottom: 16 }}>📦 Packs</h2>
+      <h2 style={{ color: '#fff', fontWeight: 700, fontSize: 20, marginBottom: 16 }}>📦 My Packs</h2>
       {error && <div style={{ background: '#3d1515', color: '#f87171', borderRadius: 8, padding: '8px 12px', marginBottom: 12, fontSize: 13 }}>{error}</div>}
       {!packs ? (
         <p style={{ color: 'var(--muted)', textAlign: 'center', paddingTop: 40 }}>Loading…</p>
@@ -142,26 +142,43 @@ export default function Packs({ token }) {
               No packs to open. Buy some from the Shop!
             </p>
           )
-          return owned.map(([key, meta]) => {
-            const count = packs[key]
-            return (
-              <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 12, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 14, padding: '14px 16px', marginBottom: 10 }}>
-                <div style={{ fontSize: 32 }}>{meta.icon}</div>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 2 }}>{meta.label}</div>
-                  <div style={{ fontSize: 12, color: 'var(--muted)' }}>{meta.desc}</div>
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
-                  <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--gold)' }}>×{count}</div>
-                  <button
-                    disabled={loading}
-                    onClick={() => openPack(key)}
-                    style={{ background: 'var(--accent)', border: 'none', borderRadius: 8, color: '#fff', padding: '6px 14px', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}
-                  >Open</button>
-                </div>
-              </div>
-            )
-          })
+          return (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 20 }}>
+              {owned.map(([key, meta]) => {
+                const count = packs[key]
+                return (
+                  <div key={key} className="anim-fadeUp" style={{
+                    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14,
+                    background: 'rgba(255,255,255,0.04)', borderRadius: 16, padding: '24px 16px 16px',
+                    border: '1px solid rgba(168,85,247,0.25)', position: 'relative',
+                  }}>
+                    {/* Count badge */}
+                    <div style={{ position: 'absolute', top: 12, right: 12, background: '#a855f7', color: '#fff', borderRadius: '50%', width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 800, boxShadow: '0 2px 10px rgba(168,85,247,0.5)', zIndex: 1 }}>
+                      {count}
+                    </div>
+                    {/* Fixed-height image container */}
+                    <div style={{ width: '100%', height: 260, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      {meta.img
+                        ? <img src={meta.img} alt={meta.label} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', display: 'block' }} />
+                        : <div style={{ fontSize: 64, opacity: 0.4 }}>💎</div>
+                      }
+                    </div>
+                    <div style={{ textAlign: 'center' }}>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: '#fff', marginBottom: 4 }}>{meta.label}</div>
+                      <div style={{ fontSize: 12, color: 'var(--muted)' }}>{meta.desc}</div>
+                    </div>
+                    <button
+                      disabled={loading}
+                      onClick={() => openPack(key)}
+                      style={{ width: '100%', background: 'linear-gradient(135deg,#7c3aed,#a855f7)', border: 'none', borderRadius: 10, color: '#fff', padding: '12px 0', cursor: 'pointer', fontSize: 14, fontWeight: 800, letterSpacing: '0.05em', boxShadow: '0 4px 20px rgba(168,85,247,0.35)' }}
+                    >
+                      OPEN
+                    </button>
+                  </div>
+                )
+              })}
+            </div>
+          )
         })()}
     </div>
   )

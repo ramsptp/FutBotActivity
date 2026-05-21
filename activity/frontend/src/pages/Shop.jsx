@@ -98,41 +98,54 @@ export default function Shop({ token }) {
   )
 }
 
+const PACK_IMAGES = {
+  rare_player_pack: '/rarepack.png',
+  icon_pack: '/iconpack.png',
+  hero_pack: '/heropack.png',
+}
+
 function BuyPacksTab({ packs, coins, onBuy, loading }) {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      {Object.entries(packs).map(([key, info]) => {
-        const canAfford = coins >= info.cost
-        return (
-          <div key={key} style={{
-            background: 'var(--surface)', border: '1px solid var(--border)',
-            borderRadius: 14, padding: '16px 18px',
-            display: 'flex', alignItems: 'center', gap: 14,
-          }}>
-            <div style={{ fontSize: 36 }}>{info.icon}</div>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 3 }}>{info.display_name}</div>
-              <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 6 }}>{info.desc}</div>
-              <div style={{ fontSize: 15, fontWeight: 700, color: canAfford ? 'var(--gold)' : 'var(--red)' }}>
-                🪙 {info.cost.toLocaleString()} coins
+    <div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 20, marginBottom: 16 }}>
+        {Object.entries(packs).map(([key, info]) => {
+          const canAfford = coins >= info.cost
+          const img = PACK_IMAGES[key]
+          return (
+            <div key={key} className="anim-fadeUp" style={{
+              display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14,
+              background: 'rgba(255,255,255,0.04)', borderRadius: 16, padding: '24px 16px 16px',
+              border: `1px solid ${canAfford ? 'rgba(168,85,247,0.25)' : 'rgba(255,255,255,0.06)'}`,
+            }}>
+              {/* Fixed-height image container so all packs are uniform */}
+              <div style={{ width: '100%', height: 260, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                {img
+                  ? <img src={img} alt={info.display_name} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', display: 'block', opacity: canAfford ? 1 : 0.45 }} />
+                  : <div style={{ fontSize: 64, opacity: 0.4 }}>💎</div>
+                }
               </div>
-            </div>
-            <button
-              disabled={!canAfford || loading}
-              onClick={() => onBuy(key)}
-              style={{
-                background: canAfford ? 'var(--accent)' : '#333',
-                border: 'none', borderRadius: 10, color: canAfford ? '#fff' : '#555',
-                padding: '10px 18px', cursor: canAfford ? 'pointer' : 'not-allowed',
-                fontSize: 14, fontWeight: 700, whiteSpace: 'nowrap',
-                transition: 'opacity 0.15s',
-              }}
-            >
-              Buy
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: '#fff', marginBottom: 6 }}>{info.display_name}</div>
+                <div style={{ fontSize: 16, fontWeight: 800, color: canAfford ? 'var(--gold)' : 'var(--red)' }}>🪙 {info.cost.toLocaleString()} coins</div>
+              </div>
+              <button
+                disabled={!canAfford || loading}
+                onClick={() => onBuy(key)}
+                style={{
+                  width: '100%',
+                  background: canAfford ? 'linear-gradient(135deg,#7c3aed,#a855f7)' : '#2a2a2a',
+                  border: 'none', borderRadius: 10, color: canAfford ? '#fff' : '#555',
+                  padding: '12px 0', cursor: canAfford ? 'pointer' : 'not-allowed',
+                  fontSize: 14, fontWeight: 800, letterSpacing: '0.05em',
+                  boxShadow: canAfford ? '0 4px 20px rgba(168,85,247,0.35)' : 'none',
+                }}
+              >
+                BUY
             </button>
           </div>
         )
       })}
+      </div>
       <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 12, padding: '12px 16px', fontSize: 13, color: 'var(--muted)', textAlign: 'center', marginTop: 4 }}>
         Earn coins by winning battles (+200) or losing (+100)
       </div>
