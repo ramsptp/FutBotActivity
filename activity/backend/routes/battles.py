@@ -76,8 +76,16 @@ async def get_incoming_challenge(discord_user=Depends(get_current_user)):
     return challenge
 
 @router.delete("/api/challenges/decline")
-async def decline_challenge(discord_user=Depends(get_current_user)):
-    pending_challenges.pop(discord_user["id"], None)
+async def decline_challenge(discord_user=Depends(get_current_user), silent: bool = False):
+    challenge = pending_challenges.pop(discord_user["id"], None)
+    if not silent and challenge and challenge.get("room_id"):
+        room = rooms.get(challenge["room_id"])
+        if room:
+            for p in room["players"].values():
+                await send_to(p, {
+                    "type": "challenge_declined",
+                    "by": discord_user["username"],
+                })
     return {"ok": True}
 
 

@@ -108,7 +108,7 @@ function App() {
       <ChallengeNotification
         challenge={page !== 'battle' ? incomingChallenge : null}
         onAccept={() => {
-          setBattleMode('friend')
+          setBattleMode('accepting')
           setPage('battle')
         }}
         onDecline={async () => {

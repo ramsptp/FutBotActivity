@@ -17,6 +17,8 @@ export default function Battle({ token, participants = [], incomingChallenge, se
 
   const [rematchRequested, setRematchRequested]         = useState(false)
   const [opponentRequestedRematch, setOpponentRequestedRematch] = useState(false)
+  const [surrenderConfirm, setSurrenderConfirm] = useState(false)
+  const [showAcceptScreen, setShowAcceptScreen] = useState(false)
 
   // Game state
   const [picksStatThisRound, setPicksStatThisRound] = useState(false)
@@ -91,6 +93,9 @@ export default function Battle({ token, participants = [], incomingChallenge, se
         case 'rematch_requested':
           setOpponentRequestedRematch(true); break
 
+        case 'challenge_declined':
+          setError(`${msg.by} declined your challenge.`); resetToLobby(); break
+
         case 'opponent_disconnected':
           setError('Opponent disconnected.'); resetToLobby(); break
 
@@ -127,7 +132,7 @@ export default function Battle({ token, participants = [], incomingChallenge, se
     if (!selectedDeck) return setError('Select a deck first')
     const c = incomingChallenge
     setIncomingChallenge(null)
-    await apiFetch('/api/challenges/decline', token, { method: 'DELETE' })
+    await apiFetch('/api/challenges/decline?silent=true', token, { method: 'DELETE' })
     connectWs(c.room_id)
   }
 
@@ -150,9 +155,9 @@ export default function Battle({ token, participants = [], incomingChallenge, se
   }
 
   function surrender() {
-    if (window.confirm('Surrender this battle? You will lose.')) {
-      wsRef.current?.send(JSON.stringify({ type: 'surrender' }))
-    }
+    if (!surrenderConfirm) { setSurrenderConfirm(true); return }
+    setSurrenderConfirm(false)
+    wsRef.current?.send(JSON.stringify({ type: 'surrender' }))
   }
 
   function resetToLobby() {
@@ -179,63 +184,175 @@ export default function Battle({ token, participants = [], incomingChallenge, se
     </div>
   )
 
+  /* ── ACCEPT CHALLENGE ── */
+  if (screen === 'lobby' && (initialMode === 'accepting' || showAcceptScreen) && incomingChallenge) return (
+    <div style={{ ...L.root, justifyContent: 'center', alignItems: 'center', textAlign: 'center' }}>
+      <div style={L.vignette} />
+      <div style={L.diagLine} />
+
+      <div className="anim-fadeUp" style={{ width: '100%', maxWidth: 380, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 20 }}>
+        {/* Challenger info */}
+        <div style={{ fontSize: 44 }}>⚔️</div>
+        <div>
+          <div style={{ fontSize: 11, fontFamily: MONTSERRAT, fontWeight: 700, color: '#ffca45', letterSpacing: '0.25em', marginBottom: 6 }}>INCOMING CHALLENGE</div>
+          <div style={{ fontSize: 26, fontFamily: MONTSERRAT, fontWeight: 900, color: '#fff' }}>{incomingChallenge.from_name}</div>
+          <div style={{ fontSize: 14, color: '#64748b', marginTop: 4 }}>wants to battle you</div>
+        </div>
+
+        <div style={{ width: '100%', height: 1, background: 'linear-gradient(to right, transparent, rgba(255,202,69,0.3), transparent)' }} />
+
+        {/* Deck selector */}
+        <div style={{ width: '100%' }}>
+          <div style={L.deckLabel}>SELECT YOUR DECK</div>
+          <select value={selectedDeck} onChange={e => setSelectedDeck(e.target.value)} className="deck-select" style={L.deckSelect}>
+            <option value="">— choose your lineup —</option>
+            {decks.map(d => <option key={d.deck_name} value={d.deck_name}>{d.deck_name}</option>)}
+          </select>
+        </div>
+
+        {error && <div style={L.error}>{error}</div>}
+
+        <button
+          onClick={async () => {
+            if (!selectedDeck) return setError('Select a deck first')
+            setError(null)
+            const c = incomingChallenge
+            setIncomingChallenge(null)
+            await apiFetch('/api/challenges/decline?silent=true', token, { method: 'DELETE' })
+            connectWs(c.room_id)
+          }}
+          style={{ ...L.goldBtn, width: '100%', fontSize: 16, padding: '15px 0' }}
+        >
+          ⚔ ENTER THE ARENA
+        </button>
+
+        <button
+          onClick={async () => {
+            await apiFetch('/api/challenges/decline', token, { method: 'DELETE' }).catch(() => {})
+            setIncomingChallenge(null)
+            setShowAcceptScreen(false)
+            resetToLobby()
+          }}
+          className="btn-ghost"
+          style={{ fontSize: 13 }}
+        >
+          Decline
+        </button>
+      </div>
+
+      <style>{`
+        @keyframes tunnelGlow { 0%,100%{opacity:0.6} 50%{opacity:1} }
+        .deck-select option { background: #0d1117; }
+      `}</style>
+    </div>
+  )
+
   /* ── LOBBY ── */
   if (screen === 'lobby') return (
-    <div className="page">
-      {/* Incoming challenge banner — shown on both modes */}
+    <div style={L.root}>
+      <style>{`
+        @keyframes tunnelGlow { 0%,100%{opacity:0.6} 50%{opacity:1} }
+        @keyframes slideRow { from{opacity:0;transform:translateX(-20px)} to{opacity:1;transform:translateX(0)} }
+        .challenge-row:hover { background: rgba(240,192,64,0.06) !important; }
+        .challenge-btn:hover { box-shadow: 0 0 20px rgba(240,192,64,0.4) !important; transform: scale(1.04); }
+        .deck-select option { background: #0d1117; }
+      `}</style>
+
+      {/* Atmospheric vignette */}
+      <div style={L.vignette} />
+
+      {/* Diagonal accent line */}
+      <div style={L.diagLine} />
+
+      {/* Incoming challenge */}
       {incomingChallenge && (
-        <div style={{ background: 'rgba(34,197,94,0.1)', border: '1px solid var(--green)', borderRadius: 12, padding: '12px 16px', marginBottom: 14 }}>
-          <div style={{ fontSize: 14, marginBottom: 10 }}>⚔️ <strong>{incomingChallenge.from_name}</strong> challenged you!</div>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button onClick={acceptChallenge} style={{ flex: 1, background: 'var(--green)', border: 'none', borderRadius: 8, color: '#fff', padding: 8, cursor: 'pointer', fontWeight: 600 }}>Accept</button>
-            <button onClick={declineChallenge} style={{ flex: 1, background: 'var(--red)', border: 'none', borderRadius: 8, color: '#fff', padding: 8, cursor: 'pointer' }}>Decline</button>
+        <div style={L.challengeBanner}>
+          <span style={{ fontSize: 20 }}>⚔️</span>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 11, color: '#ffca45', fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase' }}>Incoming Challenge</div>
+            <div style={{ fontSize: 15, fontWeight: 700 }}>{incomingChallenge.from_name}</div>
           </div>
+          <button onClick={() => setShowAcceptScreen(true)} style={L.acceptBtn}>Accept</button>
+          <button onClick={declineChallenge} style={L.declineBtn}>✕</button>
         </div>
       )}
 
-      <label style={{ display: 'block', color: 'var(--muted)', fontSize: 13, marginBottom: 6 }}>Select your deck</label>
-      <select value={selectedDeck} onChange={e => setSelectedDeck(e.target.value)} style={{ width: '100%', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, color: '#fff', padding: '10px 12px', fontSize: 14, marginBottom: 16 }}>
-        <option value="">— choose a deck —</option>
-        {decks.map(d => <option key={d.deck_name} value={d.deck_name}>{d.deck_name}</option>)}
-      </select>
+      {/* Header */}
+      <div style={L.header}>
+        <div style={L.headerLabel}>{initialMode === 'match' ? 'PRE-MATCH' : 'INVITE A FRIEND'}</div>
+        <div style={L.headerTitle}>{initialMode === 'match' ? 'FIND YOUR OPPONENT' : 'PLAY WITH FRIEND'}</div>
+        <div style={L.headerLine} />
+      </div>
 
-      {error && <div style={{ background: '#3d1515', color: '#f87171', borderRadius: 8, padding: '8px 12px', marginBottom: 12, fontSize: 13 }}>{error}</div>}
+      {/* Deck selector */}
+      <div style={L.deckWrap}>
+        <div style={L.deckLabel}>SELECT DECK</div>
+        <select
+          value={selectedDeck}
+          onChange={e => setSelectedDeck(e.target.value)}
+          className="deck-select"
+          style={L.deckSelect}
+        >
+          <option value="">— choose your lineup —</option>
+          {decks.map(d => <option key={d.deck_name} value={d.deck_name}>{d.deck_name}</option>)}
+        </select>
+      </div>
+
+      {error && <div style={L.error}>{error}</div>}
 
       {initialMode === 'match' ? (
-        /* ── FIND MATCH: challenge people in the session ── */
-        <>
-          <h2 style={{ color: '#fff', fontWeight: 700, fontSize: 18, marginBottom: 12 }}>⚔️ Find Match</h2>
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
           {participants.length > 0 ? (
             <>
-              <div style={{ color: 'var(--muted)', fontSize: 12, marginBottom: 10 }}>Players in this session</div>
-              {participants.map(p => (
-                <div key={p.user_id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, padding: '10px 14px', marginBottom: 8 }}>
-                  <span style={{ fontSize: 14, fontWeight: 500 }}>👤 {p.name}</span>
-                  <button onClick={() => challengePlayer(p.user_id)} style={{ background: 'var(--accent)', border: 'none', borderRadius: 8, color: '#fff', padding: '6px 14px', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>Challenge</button>
-                </div>
-              ))}
+              <div style={L.sectionLabel}>OPPONENTS IN SESSION</div>
+              <div style={{ flex: 1, overflowY: 'auto' }}>
+                {participants.map((p, i) => (
+                  <div key={p.user_id} className="challenge-row" style={{ ...L.opponentRow, animationDelay: `${i * 0.08}s` }}>
+                    <div style={L.opponentAvatar}>
+                      <img
+                        src={p.avatar ? `https://cdn.discordapp.com/avatars/${p.user_id}/${p.avatar}.png?size=64` : `https://cdn.discordapp.com/embed/avatars/0.png`}
+                        style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }}
+                        onError={e => { e.target.src = 'https://cdn.discordapp.com/embed/avatars/0.png' }}
+                      />
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 15, fontWeight: 700, color: '#fff' }}>{p.name}</div>
+                      <div style={{ fontSize: 11, color: '#4ade80', fontWeight: 600, letterSpacing: 0.5 }}>● ONLINE</div>
+                    </div>
+                    <button className="challenge-btn" onClick={() => challengePlayer(p.user_id)} style={L.challengeBtn}>
+                      ⚔ CHALLENGE
+                    </button>
+                  </div>
+                ))}
+              </div>
             </>
           ) : (
-            <div style={{ background: 'var(--surface)', borderRadius: 12, padding: '24px 16px', textAlign: 'center', color: 'var(--muted)', fontSize: 14, marginBottom: 14 }}>
-              <div style={{ fontSize: 32, marginBottom: 8 }}>👥</div>
-              No one else is in this session yet.<br />Use Play with Friend to invite via code.
+            <div style={L.emptyState}>
+              <div style={{ fontSize: 48, marginBottom: 12, opacity: 0.4 }}>🏟️</div>
+              <div style={{ fontSize: 14, color: '#64748b', lineHeight: 1.6 }}>
+                No opponents in this session yet.<br />
+                <span style={{ color: '#94a3b8' }}>Create a room or use Play with Friend.</span>
+              </div>
             </div>
           )}
-          <div style={{ color: 'var(--muted)', fontSize: 13, textAlign: 'center', margin: '14px 0 8px' }}>or create a room to wait</div>
-          <button className="btn-primary" onClick={createRoom}>Create Room</button>
-        </>
+          <div style={L.orDivider}><span style={L.orText}>OR</span></div>
+          <button onClick={createRoom} style={L.goldBtn}>CREATE ROOM TO WAIT</button>
+        </div>
       ) : (
-        /* ── PLAY WITH FRIEND: code-based ── */
-        <>
-          <h2 style={{ color: '#fff', fontWeight: 700, fontSize: 18, marginBottom: 12 }}>👥 Play with Friend</h2>
-          <button className="btn-primary" onClick={createRoom} style={{ marginBottom: 8 }}>Create Room & Share Code</button>
-          <div style={{ color: 'var(--muted)', fontSize: 13, textAlign: 'center', margin: '10px 0' }}>or join a friend's room</div>
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <button onClick={createRoom} style={L.goldBtn}>CREATE ROOM & SHARE CODE</button>
+          <div style={L.orDivider}><span style={L.orText}>JOIN WITH CODE</span></div>
           <div style={{ display: 'flex', gap: 8 }}>
-            <input value={joinCode} onChange={e => setJoinCode(e.target.value.toUpperCase())} maxLength={6} placeholder="Enter room code"
-              style={{ flex: 1, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, color: '#fff', padding: '10px 12px', fontSize: 16, letterSpacing: 4 }} />
-            <button onClick={joinRoom} style={{ background: 'var(--accent)', border: 'none', borderRadius: 8, color: '#fff', padding: '10px 18px', cursor: 'pointer', fontSize: 14, fontWeight: 600 }}>Join</button>
+            <input
+              value={joinCode}
+              onChange={e => setJoinCode(e.target.value.toUpperCase())}
+              maxLength={6}
+              placeholder="A1B2C3"
+              style={L.codeInput}
+            />
+            <button onClick={joinRoom} style={L.joinBtn}>JOIN</button>
           </div>
-        </>
+        </div>
       )}
     </div>
   )
@@ -255,7 +372,7 @@ export default function Battle({ token, participants = [], incomingChallenge, se
   /* ── STAT SELECTION (host) ── */
   if (screen === 'stat_selection') return (
     <div className="page">
-      <BattleBar round={round} score={score} opponent={opponentName} onSurrender={surrender} />
+      <BattleBar round={round} score={score} opponent={opponentName} onSurrender={{ start: surrender, confirm: surrender, cancel: () => setSurrenderConfirm(false), confirming: surrenderConfirm }} />
       <div style={{ color: 'var(--muted)', fontSize: 13, marginBottom: 12, textAlign: 'center' }}>
         Round {round} — choose your stat
       </div>
@@ -280,7 +397,7 @@ export default function Battle({ token, participants = [], incomingChallenge, se
   /* ── WAITING FOR STAT (guest) ── */
   if (screen === 'waiting_for_stat') return (
     <div className="page">
-      <BattleBar round={round} score={score} opponent={opponentName} onSurrender={surrender} />
+      <BattleBar round={round} score={score} opponent={opponentName} onSurrender={{ start: surrender, confirm: surrender, cancel: () => setSurrenderConfirm(false), confirming: surrenderConfirm }} />
       <div style={{ textAlign: 'center', color: 'var(--muted)', fontSize: 14, marginBottom: 20, padding: '12px', background: 'var(--surface)', borderRadius: 10, border: '1px solid var(--border)' }}>
         ⏳ {opponentName} is choosing their stat…
       </div>
@@ -291,7 +408,7 @@ export default function Battle({ token, participants = [], incomingChallenge, se
   /* ── PICKING ── */
   if (screen === 'picking') return (
     <div className="page">
-      <BattleBar round={round} score={score} opponent={opponentName} onSurrender={surrender} />
+      <BattleBar round={round} score={score} opponent={opponentName} onSurrender={{ start: surrender, confirm: surrender, cancel: () => setSurrenderConfirm(false), confirming: surrenderConfirm }} />
 
       {/* Active stat display */}
       <div style={{ textAlign: 'center', marginBottom: 16 }}>
@@ -397,6 +514,120 @@ export default function Battle({ token, participants = [], incomingChallenge, se
   return null
 }
 
+/* ── Lobby styles ── */
+const MONTSERRAT = "'Montserrat', system-ui, sans-serif"
+const L = {
+  root: {
+    position: 'relative', minHeight: '100svh', display: 'flex', flexDirection: 'column',
+    padding: '20px 20px 90px',
+    background: `linear-gradient(to bottom, rgba(5,9,20,0.88) 0%, rgba(5,9,20,0.96) 100%), url('/background.png') center/cover no-repeat`,
+    overflow: 'hidden',
+  },
+  vignette: {
+    position: 'absolute', inset: 0, pointerEvents: 'none',
+    background: 'radial-gradient(ellipse at 50% 0%, transparent 40%, rgba(5,9,20,0.8) 100%)',
+  },
+  diagLine: {
+    position: 'absolute', top: 0, right: '15%', width: 2, height: '35%',
+    background: 'linear-gradient(to bottom, transparent, rgba(240,192,64,0.3), transparent)',
+    transform: 'skewX(-20deg)', pointerEvents: 'none',
+  },
+  challengeBanner: {
+    display: 'flex', alignItems: 'center', gap: 12,
+    background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.4)',
+    borderRadius: 12, padding: '10px 14px', marginBottom: 16,
+  },
+  acceptBtn: {
+    background: 'linear-gradient(135deg,#22c55e,#16a34a)', border: 'none',
+    borderRadius: 8, color: '#fff', padding: '7px 14px', fontWeight: 700, cursor: 'pointer', fontSize: 13,
+  },
+  declineBtn: {
+    background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.3)',
+    borderRadius: 8, color: '#ef4444', padding: '7px 10px', fontWeight: 700, cursor: 'pointer', fontSize: 13,
+  },
+  header: { marginBottom: 20, position: 'relative' },
+  headerLabel: {
+    fontSize: 11, fontFamily: MONTSERRAT, fontWeight: 700, color: '#ffca45',
+    letterSpacing: '0.25em', marginBottom: 4,
+  },
+  headerTitle: {
+    fontSize: 28, fontFamily: MONTSERRAT, fontWeight: 900, color: '#fff',
+    letterSpacing: '0.08em', lineHeight: 1.1, textTransform: 'uppercase',
+  },
+  headerLine: {
+    marginTop: 10, height: 2, width: 60,
+    background: 'linear-gradient(to right, #ffca45, transparent)',
+  },
+  deckWrap: { marginBottom: 16 },
+  deckLabel: {
+    fontSize: 10, fontFamily: MONTSERRAT, fontWeight: 700, color: '#64748b',
+    letterSpacing: '0.2em', marginBottom: 6,
+  },
+  deckSelect: {
+    width: '100%', background: 'rgba(255,255,255,0.04)',
+    border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10,
+    color: '#fff', padding: '11px 14px', fontSize: 14,
+    fontFamily: MONTSERRAT, fontWeight: 600, cursor: 'pointer',
+    outline: 'none', appearance: 'none',
+    backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23ffca45' stroke-width='1.5' fill='none'/%3E%3C/svg%3E")`,
+    backgroundRepeat: 'no-repeat', backgroundPosition: 'right 14px center',
+  },
+  error: {
+    background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)',
+    borderRadius: 8, color: '#f87171', padding: '8px 12px', marginBottom: 12, fontSize: 13,
+  },
+  sectionLabel: {
+    fontSize: 10, fontFamily: MONTSERRAT, fontWeight: 700, color: '#64748b',
+    letterSpacing: '0.2em', marginBottom: 10,
+  },
+  opponentRow: {
+    display: 'flex', alignItems: 'center', gap: 12,
+    background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)',
+    borderRadius: 12, padding: '12px 14px', marginBottom: 8,
+    animation: 'slideRow 0.3s ease both', transition: 'background 0.2s',
+    cursor: 'default',
+  },
+  opponentAvatar: {
+    width: 40, height: 40, borderRadius: '50%', overflow: 'hidden', flexShrink: 0,
+    border: '2px solid rgba(255,255,255,0.1)',
+  },
+  challengeBtn: {
+    background: 'rgba(240,192,64,0.1)', border: '1px solid rgba(240,192,64,0.4)',
+    borderRadius: 8, color: '#ffca45', padding: '7px 14px',
+    fontFamily: MONTSERRAT, fontWeight: 800, fontSize: 12, cursor: 'pointer',
+    letterSpacing: '0.08em', transition: 'all 0.15s',
+  },
+  emptyState: {
+    flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center',
+    justifyContent: 'center', textAlign: 'center', padding: '32px 16px',
+  },
+  orDivider: {
+    display: 'flex', alignItems: 'center', gap: 12, margin: '12px 0',
+  },
+  orText: {
+    fontSize: 10, fontFamily: MONTSERRAT, fontWeight: 700, color: '#334155',
+    letterSpacing: '0.2em', whiteSpace: 'nowrap',
+  },
+  goldBtn: {
+    width: '100%', background: 'linear-gradient(135deg, #d97706, #ffca45)',
+    border: 'none', borderRadius: 12, color: '#0a0500',
+    padding: '13px 0', fontFamily: MONTSERRAT, fontWeight: 900, fontSize: 14,
+    cursor: 'pointer', letterSpacing: '0.1em', textTransform: 'uppercase',
+    boxShadow: '0 4px 20px rgba(255,202,69,0.25)',
+  },
+  codeInput: {
+    flex: 1, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)',
+    borderRadius: 10, color: '#fff', padding: '12px 14px',
+    fontSize: 22, letterSpacing: '0.3em', fontFamily: MONTSERRAT, fontWeight: 700,
+    textAlign: 'center', outline: 'none',
+  },
+  joinBtn: {
+    background: 'var(--accent)', border: 'none', borderRadius: 10,
+    color: '#fff', padding: '12px 22px', cursor: 'pointer',
+    fontFamily: MONTSERRAT, fontWeight: 800, fontSize: 14, letterSpacing: '0.1em',
+  },
+}
+
 /* ── Sub-components ── */
 
 function BattleBar({ round, score, opponent, onSurrender }) {
@@ -408,9 +639,15 @@ function BattleBar({ round, score, opponent, onSurrender }) {
       </div>
       <span style={{ fontSize: 12, color: 'var(--muted)' }}>vs {opponent}</span>
       {onSurrender && (
-        <button onClick={onSurrender} style={{ marginLeft: 8, background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.4)', borderRadius: 6, color: '#ef4444', fontSize: 11, padding: '3px 8px', cursor: 'pointer', fontWeight: 600 }}>
-          Surrender
-        </button>
+        onSurrender.confirming
+          ? <div style={{ display: 'flex', gap: 4, marginLeft: 8 }}>
+              <span style={{ fontSize: 11, color: '#ef4444', alignSelf: 'center' }}>Sure?</span>
+              <button onClick={onSurrender.confirm} style={{ background: '#ef4444', border: 'none', borderRadius: 6, color: '#fff', fontSize: 11, padding: '3px 8px', cursor: 'pointer', fontWeight: 700 }}>Yes</button>
+              <button onClick={onSurrender.cancel} style={{ background: 'transparent', border: '1px solid #444', borderRadius: 6, color: '#aaa', fontSize: 11, padding: '3px 6px', cursor: 'pointer' }}>No</button>
+            </div>
+          : <button onClick={onSurrender.start} style={{ marginLeft: 8, background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.4)', borderRadius: 6, color: '#ef4444', fontSize: 11, padding: '3px 8px', cursor: 'pointer', fontWeight: 600 }}>
+              Surrender
+            </button>
       )}
     </div>
   )
