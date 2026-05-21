@@ -30,6 +30,17 @@ function topForFan(cards) {
   return [...cards].sort((a, b) => b.overall - a.overall).slice(0, 10)
 }
 
+function pickFeaturedIndex(cards) {
+  // Prefer non-Standard Rare (Icon, Hero, etc.) — only fall back to Standard if none exist
+  const specials = cards.filter(c => c.card_rarity === 'Rare' && c.card_type !== 'Standard')
+  if (specials.length > 0) {
+    const best = Math.max(...specials.map(c => c.overall))
+    return cards.findIndex(c => c.card_rarity === 'Rare' && c.card_type !== 'Standard' && c.overall === best)
+  }
+  const best = Math.max(...cards.map(c => c.overall))
+  return cards.findIndex(c => c.overall === best)
+}
+
 function calcValue(card) {
   const type = (card.card_type || '').toLowerCase()
   let value = type.includes('icon') ? 250 : type.includes('hero') ? 175 : 100
@@ -53,8 +64,11 @@ export default function Packs({ token, starterCards = null, onStarterDone = null
   const [featuredStatStep, setFeaturedStatStep] = useState(0)
   const [featuredFlipped, setFeaturedFlipped]   = useState(false)
   const [featuredShine, setFeaturedShine]       = useState(false)
+  const [featuredGlowPhase, setFeaturedGlowPhase] = useState('none')
+  const [featuredShowBack, setFeaturedShowBack] = useState(false)
   const featuredTimers = useRef([])
   const [statStep, setStatStep]   = useState(0)
+  const [glowPhase, setGlowPhase] = useState('none')
   const [loading, setLoading]     = useState(false)
   const [error, setError]         = useState(null)
 
@@ -70,8 +84,7 @@ export default function Packs({ token, starterCards = null, onStarterDone = null
     const fanCards = topForFan(starterCards)
     preloadImages(fanCards.map(c => c.image_url)).then(() => {
       setRevealedCards(fanCards)
-      const maxOvr = Math.max(...fanCards.map(c => c.overall))
-      setFeaturedIndex(fanCards.findIndex(c => c.overall === maxOvr))
+      setFeaturedIndex(pickFeaturedIndex(fanCards))
     })
   }, [starterCards])
 
@@ -82,17 +95,19 @@ export default function Packs({ token, starterCards = null, onStarterDone = null
     setFlipped(false)
     setShineActive(false)
     setStatStep(0)
-    const t1 = setTimeout(() => setPhase('flash'), 900)
-    const t2 = setTimeout(() => setPhase('stats'), 1200)
-    const t3 = setTimeout(() => setStatStep(1), 1800)   // rarity + type
-    const t4 = setTimeout(() => setStatStep(2), 2700)   // ATK
-    const t5 = setTimeout(() => setStatStep(3), 3500)   // DEF
-    const t6 = setTimeout(() => setStatStep(4), 4300)   // SPD
-    const t7 = setTimeout(() => setStatStep(5), 5300)   // OVR big reveal
-    const t8 = setTimeout(() => setFlipped(true), 6400) // card flips
-    const t9 = setTimeout(() => setShineActive(true), 7000)
-    const t10 = setTimeout(() => setShineActive(false), 7700)
-    return () => [t1,t2,t3,t4,t5,t6,t7,t8,t9,t10].forEach(clearTimeout)
+    setGlowPhase('none')
+    const t1  = setTimeout(() => setPhase('flash'), 900)
+    const t2  = setTimeout(() => setPhase('stats'), 1200)
+    const t3  = setTimeout(() => setStatStep(1), 1800)
+    const t4  = setTimeout(() => setStatStep(2), 2700)
+    const t5  = setTimeout(() => setStatStep(3), 3500)
+    const t6  = setTimeout(() => setStatStep(4), 4300)
+    const t7  = setTimeout(() => setStatStep(5), 5300)
+    const t8  = setTimeout(() => { setFlipped(true); setGlowPhase('reveal') }, 6400)
+    const t9  = setTimeout(() => setShineActive(true), 7000)
+    const t10 = setTimeout(() => { setShineActive(false); setGlowPhase('entry') }, 7700)
+    const t11 = setTimeout(() => setGlowPhase('cycle'), 8700)
+    return () => [t1,t2,t3,t4,t5,t6,t7,t8,t9,t10,t11].forEach(clearTimeout)
   }, [screen, revealIndex])
 
   async function fetchPacks() {
@@ -112,8 +127,7 @@ export default function Packs({ token, starterCards = null, onStarterDone = null
       if (cards.length > 1) {
         setFlippedCards([])
         setLastFlipped(null)
-        const maxOvr = Math.max(...displayCards.map(c => c.overall))
-        setFeaturedIndex(displayCards.findIndex(c => c.overall === maxOvr))
+        setFeaturedIndex(pickFeaturedIndex(displayCards))
         setScreen('fan')
       } else {
         setRevealIndex(0)
@@ -141,19 +155,25 @@ export default function Packs({ token, starterCards = null, onStarterDone = null
     setFeaturedStatStep(0)
     setFeaturedFlipped(false)
     setFeaturedShine(false)
-    const t1 = setTimeout(() => setFeaturedStatStep(1), 600)
-    const t2 = setTimeout(() => setFeaturedStatStep(2), 1400)
-    const t3 = setTimeout(() => setFeaturedStatStep(3), 2200)
-    const t4 = setTimeout(() => setFeaturedStatStep(4), 3000)
-    const t5 = setTimeout(() => setFeaturedStatStep(5), 4000)
-    const t6 = setTimeout(() => setFeaturedFlipped(true), 5100)
-    const t7 = setTimeout(() => setFeaturedShine(true), 5700)
-    const t8 = setTimeout(() => setFeaturedShine(false), 6400)
-    featuredTimers.current = [t1,t2,t3,t4,t5,t6,t7,t8]
+    setFeaturedGlowPhase('none')
+    setFeaturedShowBack(false)
+    const t1  = setTimeout(() => setFeaturedStatStep(1), 600)
+    const t2  = setTimeout(() => setFeaturedStatStep(2), 1400)
+    const t3  = setTimeout(() => setFeaturedStatStep(3), 2200)
+    const t4  = setTimeout(() => setFeaturedStatStep(4), 3000)
+    const t5  = setTimeout(() => setFeaturedStatStep(5), 4000)
+    const t6  = setTimeout(() => { setFeaturedFlipped(true); setFeaturedGlowPhase('reveal') }, 5100)
+    const t7  = setTimeout(() => setFeaturedShine(true), 5700)
+    const t8  = setTimeout(() => { setFeaturedShine(false); setFeaturedGlowPhase('entry') }, 6400)
+    const t9  = setTimeout(() => setFeaturedGlowPhase('cycle'), 7400)
+    const t10 = setTimeout(() => setFeaturedShowBack(true), 6800)
+    featuredTimers.current = [t1,t2,t3,t4,t5,t6,t7,t8,t9,t10]
   }
 
   function dismissFeatured() {
     featuredTimers.current.forEach(clearTimeout)
+    setFeaturedGlowPhase('none')
+    setFeaturedShowBack(false)
     if (featuredCard) flipCard(featuredCard.index)
     setFeaturedCard(null)
   }
@@ -170,7 +190,7 @@ export default function Packs({ token, starterCards = null, onStarterDone = null
   if (screen === 'fan') {
     const total = revealedCards.length
     const flippedCount = flippedCards.length
-    const allFlipped = flippedCount === total
+    const allFlipped = total > 0 && flippedCount === total
     const packLabel = PACK_META[openingPack]?.label
     const ROTS = [-8, 6, -11, 9, -5, 12, -7, 10, -9, 5, -12, 7, -6, 11, -4, 8]
 
@@ -183,6 +203,10 @@ export default function Packs({ token, starterCards = null, onStarterDone = null
       const m = s.match(/rgba?\([^)]+\)/); const parts = s.trim().split(/\s+/)
       return `drop-shadow(0 0 ${parts[2] || '20px'} ${m?.[0] || 'gold'})`
     }).join(' ') : ''
+    const fcPulseColor = (fcColors?.glow.match(/rgba?\([^)]+\)/)?.[0] || 'rgba(240,192,64,0.5)').replace(/[\d.]+\)$/, '0.65)')
+    const fcPulseDropShadow = `${fcDropShadow} drop-shadow(0 0 50px ${fcPulseColor})`
+    const fcDimColor = (fcColors?.glow.match(/rgba?\([^)]+\)/)?.[0] || 'rgba(240,192,64,0.3)').replace(/[\d.]+\)$/, '0.3)')
+    const fcDimDropShadow = `drop-shadow(0 0 14px ${fcDimColor})`
 
     return (
       <div style={{ position: 'fixed', inset: 0, background: '#050914', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-start', gap: 20, overflowY: 'auto', padding: '32px 12px 110px' }}>
@@ -223,36 +247,50 @@ export default function Packs({ token, starterCards = null, onStarterDone = null
             from { opacity: 0; }
             to   { opacity: 1; }
           }
+          @keyframes seeAllPulse {
+            0%,100% { box-shadow: 0 4px 20px rgba(168,85,247,0.45); transform: scale(1); }
+            50%     { box-shadow: 0 4px 32px rgba(168,85,247,0.9); transform: scale(1.07); }
+          }
+          @keyframes fcGlowReveal {
+            from { filter: none; }
+            to   { filter: ${fcPulseDropShadow}; }
+          }
+          @keyframes fcGlowEntry {
+            from { filter: ${fcPulseDropShadow}; }
+            to   { filter: ${fcDropShadow}; }
+          }
+          @keyframes fcGlowCycle {
+            0%,100% { filter: ${fcDropShadow}; }
+            55%     { filter: ${fcDimDropShadow}; }
+          }
         `}</style>
 
-        {openingPack === 'starter_pack' ? (
-          <div style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: 22, fontWeight: 900, color: '#fff', fontFamily: "'Montserrat', sans-serif", letterSpacing: 1 }}>Welcome to FutBot!</div>
-            {total > 0 && (
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, marginTop: 6 }}>
-                <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, width: '100%', maxWidth: 600, flexWrap: 'wrap' }}>
+          {openingPack === 'starter_pack' ? (
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: 22, fontWeight: 900, color: '#fff', fontFamily: "'Montserrat', sans-serif", letterSpacing: 1 }}>Welcome to FutBot!</div>
+              {total > 0 && (
+                <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)', marginTop: 6 }}>
                   {allFlipped ? 'Your squad is ready!' : `Tap each card to reveal · ${flippedCount} / ${total}`}
-                </span>
-                {!allFlipped && (
-                  <button onClick={revealAll} style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.2)', borderRadius: 8, color: 'rgba(255,255,255,0.5)', padding: '3px 12px', fontSize: 12, cursor: 'pointer' }}>
-                    Reveal All
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
-        ) : (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                </div>
+              )}
+            </div>
+          ) : (
             <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)', letterSpacing: 2 }}>
               {packLabel} &nbsp;·&nbsp; {allFlipped ? 'All revealed!' : `Tap a card to reveal · ${flippedCount} / ${total}`}
             </span>
-            {!allFlipped && total > 0 && (
-              <button onClick={revealAll} style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.2)', borderRadius: 8, color: 'rgba(255,255,255,0.5)', padding: '3px 12px', fontSize: 12, cursor: 'pointer' }}>
-                Reveal All
-              </button>
-            )}
-          </div>
-        )}
+          )}
+          {!allFlipped && total > 0 && (
+            <button onClick={revealAll} style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.2)', borderRadius: 8, color: 'rgba(255,255,255,0.5)', padding: '3px 12px', fontSize: 12, cursor: 'pointer', flexShrink: 0 }}>
+              Reveal All
+            </button>
+          )}
+          {allFlipped && !featuredCard && (
+            <button onClick={() => setScreen('result')} className="anim-fadeUp" style={{ background: 'linear-gradient(135deg,#7c3aed,#a855f7)', border: 'none', borderRadius: 10, color: '#fff', padding: '8px 20px', fontSize: 14, fontWeight: 800, cursor: 'pointer', flexShrink: 0, animation: 'seeAllPulse 1.4s ease infinite' }}>
+              See All Cards →
+            </button>
+          )}
+        </div>
 
         {total === 0 && (
           <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', textAlign: 'center' }}>
@@ -308,11 +346,6 @@ export default function Packs({ token, starterCards = null, onStarterDone = null
           })}
         </div>
 
-        {allFlipped && (
-          <button className="btn-primary anim-fadeUp" onClick={() => setScreen('result')}>
-            See All Cards
-          </button>
-        )}
 
         {/* ── FEATURED REVEAL OVERLAY ── */}
         {featuredCard && (
@@ -325,7 +358,7 @@ export default function Packs({ token, starterCards = null, onStarterDone = null
             {/* Card */}
             <div style={{ width: 220, perspective: 900, animation: 'cardEntrance 0.4s ease both' }}>
               <div style={{ width: '100%', transformStyle: 'preserve-3d', position: 'relative', transition: 'transform 0.6s cubic-bezier(0.4,0,0.2,1)', transform: featuredFlipped ? 'rotateY(0deg)' : 'rotateY(180deg)', borderRadius: 10, animation: !featuredFlipped ? 'fcBackPulse 0.8s ease infinite' : 'none' }}>
-                <div style={{ backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden', borderRadius: 10, overflow: 'hidden', position: 'relative', filter: featuredFlipped ? fcDropShadow : 'none', transition: 'filter 0.4s ease' }}>
+                <div style={{ backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden', borderRadius: 10, overflow: 'hidden', position: 'relative', animation: featuredGlowPhase === 'reveal' ? 'fcGlowReveal 0.6s cubic-bezier(0.4,0,0.2,1) forwards' : featuredGlowPhase === 'entry' ? 'fcGlowEntry 1.0s ease forwards' : featuredGlowPhase === 'cycle' ? 'fcGlowCycle 3.5s ease infinite' : 'none' }}>
                   <FutCard card={fc} />
                   {featuredShine && (
                     <div style={{ position: 'absolute', top: 0, bottom: 0, width: '45%', background: 'linear-gradient(to right, transparent, rgba(255,255,255,0.55), transparent)', transform: 'skewX(-12deg)', animation: 'shineSweep 0.65s ease forwards', pointerEvents: 'none' }} />
@@ -385,7 +418,7 @@ export default function Packs({ token, starterCards = null, onStarterDone = null
                 </div>
               </div>
             )}
-            {featuredFlipped && !featuredShine && (
+            {featuredShowBack && (
               <button className="btn-primary anim-fadeUp" onClick={dismissFeatured} style={{ maxWidth: 260 }}>
                 Back to Pack
               </button>
@@ -408,6 +441,10 @@ export default function Packs({ token, starterCards = null, onStarterDone = null
       const color = m?.[0] || 'gold'
       return `drop-shadow(0 0 ${parts[2] || '20px'} ${color})`
     }).join(' ')
+    const pulseColor = (glow.match(/rgba?\([^)]+\)/)?.[0] || 'rgba(240,192,64,0.5)').replace(/[\d.]+\)$/, '0.65)')
+    const pulseDropShadow = `${dropShadow} drop-shadow(0 0 50px ${pulseColor})`
+    const dimColor = (glow.match(/rgba?\([^)]+\)/)?.[0] || 'rgba(240,192,64,0.3)').replace(/[\d.]+\)$/, '0.3)')
+    const dimDropShadow = `drop-shadow(0 0 14px ${dimColor})`
     const packImg = PACK_META[openingPack]?.img
     const packLabel = PACK_META[openingPack]?.label
 
@@ -457,6 +494,22 @@ export default function Packs({ token, starterCards = null, onStarterDone = null
             0%,100% { text-shadow: 0 0 20px rgba(240,192,64,0.6); }
             50%      { text-shadow: 0 0 50px rgba(240,192,64,1), 0 0 80px rgba(240,192,64,0.5); }
           }
+          @keyframes seeAllPulse {
+            0%,100% { box-shadow: 0 4px 20px rgba(168,85,247,0.45); transform: scale(1); }
+            50%     { box-shadow: 0 4px 32px rgba(168,85,247,0.9); transform: scale(1.07); }
+          }
+          @keyframes glowReveal {
+            from { filter: none; }
+            to   { filter: ${pulseDropShadow}; }
+          }
+          @keyframes glowEntry {
+            from { filter: ${pulseDropShadow}; }
+            to   { filter: ${dropShadow}; }
+          }
+          @keyframes glowCycle {
+            0%,100% { filter: ${dropShadow}; }
+            55%     { filter: ${dimDropShadow}; }
+          }
         `}</style>
 
         {/* Rarity flash overlay */}
@@ -465,8 +518,15 @@ export default function Packs({ token, starterCards = null, onStarterDone = null
         )}
 
         {/* Counter */}
-        <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)', letterSpacing: 2, position: 'absolute', top: 24 }}>
-          {packLabel} &nbsp;·&nbsp; {revealIndex + 1} / {revealedCards.length}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, position: 'absolute', top: 20, left: '50%', transform: 'translateX(-50%)', whiteSpace: 'nowrap' }}>
+          <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)', letterSpacing: 2 }}>
+            {packLabel} &nbsp;·&nbsp; {revealIndex + 1} / {revealedCards.length}
+          </span>
+          {flipped && revealIndex === revealedCards.length - 1 && (
+            <button onClick={() => setScreen('result')} className="anim-fadeUp" style={{ background: 'linear-gradient(135deg,#7c3aed,#a855f7)', border: 'none', borderRadius: 10, color: '#fff', padding: '8px 20px', fontSize: 14, fontWeight: 800, cursor: 'pointer', animation: 'seeAllPulse 1.4s ease infinite', whiteSpace: 'nowrap' }}>
+              See All Cards →
+            </button>
+          )}
         </div>
 
         {/* SHAKE PHASE — pack image */}
@@ -497,7 +557,7 @@ export default function Packs({ token, starterCards = null, onStarterDone = null
                 animation: !flipped && phase === 'stats' ? 'backPulse 0.8s ease infinite' : 'none',
               }}>
                 {/* Card front */}
-                <div style={{ backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden', borderRadius: 10, overflow: 'hidden', position: 'relative', filter: flipped ? dropShadow : 'none', transition: 'filter 0.4s ease' }}>
+                <div style={{ backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden', borderRadius: 10, overflow: 'hidden', position: 'relative', animation: glowPhase === 'reveal' ? 'glowReveal 0.6s cubic-bezier(0.4,0,0.2,1) forwards' : glowPhase === 'entry' ? 'glowEntry 1.0s ease forwards' : glowPhase === 'cycle' ? 'glowCycle 3.5s ease infinite' : 'none' }}>
                   <FutCard card={card} />
                   {shineActive && (
                     <div style={{ position: 'absolute', top: 0, bottom: 0, width: '45%', background: 'linear-gradient(to right, transparent, rgba(255,255,255,0.55), transparent)', transform: 'skewX(-12deg)', animation: 'shineSweep 0.65s ease forwards', pointerEvents: 'none' }} />
@@ -566,9 +626,9 @@ export default function Packs({ token, starterCards = null, onStarterDone = null
                 </div>
               </div>
             )}
-            {flipped && (
+            {flipped && revealIndex < revealedCards.length - 1 && (
               <button className="btn-primary anim-fadeUp" onClick={nextCard} style={{ maxWidth: 260 }}>
-                {revealIndex < revealedCards.length - 1 ? 'Next Card →' : 'See All'}
+                Next Card →
               </button>
             )}
           </>
@@ -584,6 +644,7 @@ export default function Packs({ token, starterCards = null, onStarterDone = null
       token={token}
       onBack={openingPack === 'starter_pack' && onStarterDone ? onStarterDone : () => setScreen('list')}
       backLabel={openingPack === 'starter_pack' ? 'Build Your First Deck →' : 'Back to Packs'}
+      isStarter={openingPack === 'starter_pack'}
     />
   )
 
@@ -643,7 +704,7 @@ export default function Packs({ token, starterCards = null, onStarterDone = null
   )
 }
 
-function ResultScreen({ cards, token, onBack, backLabel = 'Back to Packs' }) {
+function ResultScreen({ cards, token, onBack, backLabel = 'Back to Packs', isStarter = false }) {
   const [sold, setSold]         = useState({})
   const [confirming, setConfirming] = useState(null) // card_id being confirmed
   const [toast, setToast]       = useState(null)
@@ -676,23 +737,25 @@ function ResultScreen({ cards, token, onBack, backLabel = 'Back to Packs' }) {
           return (
             <div key={i} className="anim-fadeUp" style={{ animationDelay: `${i * 0.06}s`, opacity: isSold ? 0.4 : 1, transition: 'opacity 0.3s' }}>
               <FutCard card={card} />
-              <div style={{ marginTop: 6, textAlign: 'center' }}>
-                {isSold ? (
-                  <div style={{ fontSize: 12, color: '#22c55e', fontWeight: 600 }}>✓ Sold for 🪙{sold[card.card_id]}</div>
-                ) : confirming === card.card_id ? (
-                  <div style={{ display: 'flex', gap: 4 }}>
-                    <button onClick={() => sellCard(card)} style={{ flex: 1, background: '#ef4444', border: 'none', borderRadius: 7, color: '#fff', padding: '5px 0', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>Confirm</button>
-                    <button onClick={() => setConfirming(null)} style={{ flex: 1, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 7, color: '#aaa', padding: '5px 0', fontSize: 11, cursor: 'pointer' }}>Cancel</button>
-                  </div>
-                ) : (
-                  <button
-                    onClick={() => setConfirming(card.card_id)}
-                    style={{ background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 8, color: '#f87171', padding: '5px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer', width: '100%' }}
-                  >
-                    Sell 🪙{sellValue}
-                  </button>
-                )}
-              </div>
+              {!isStarter && (
+                <div style={{ marginTop: 6, textAlign: 'center' }}>
+                  {isSold ? (
+                    <div style={{ fontSize: 12, color: '#22c55e', fontWeight: 600 }}>✓ Sold for 🪙{sold[card.card_id]}</div>
+                  ) : confirming === card.card_id ? (
+                    <div style={{ display: 'flex', gap: 4 }}>
+                      <button onClick={() => sellCard(card)} style={{ flex: 1, background: '#ef4444', border: 'none', borderRadius: 7, color: '#fff', padding: '5px 0', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>Confirm</button>
+                      <button onClick={() => setConfirming(null)} style={{ flex: 1, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 7, color: '#aaa', padding: '5px 0', fontSize: 11, cursor: 'pointer' }}>Cancel</button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setConfirming(card.card_id)}
+                      style={{ background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 8, color: '#f87171', padding: '5px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer', width: '100%' }}
+                    >
+                      Sell 🪙{sellValue}
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           )
         })}
