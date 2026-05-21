@@ -50,11 +50,11 @@ export default function Packs({ token }) {
     setPhase('shake')
     setFlipped(false)
     setShineActive(false)
-    const t1 = setTimeout(() => setPhase('flash'), 900)
-    const t2 = setTimeout(() => setPhase('reveal'), 1200)   // card appears face-down
-    const t3 = setTimeout(() => setFlipped(true), 2000)     // pause on back before flip
-    const t4 = setTimeout(() => setShineActive(true), 2650) // shine after flip lands
-    const t5 = setTimeout(() => setShineActive(false), 3350)
+    const t1 = setTimeout(() => setPhase('flash'), 900)     // shake ends → rarity flash
+    const t2 = setTimeout(() => setPhase('reveal'), 1200)   // flash done → reveal card back
+    const t3 = setTimeout(() => setFlipped(true), 2200)     // pause on back before flip
+    const t4 = setTimeout(() => setShineActive(true), 2850)
+    const t5 = setTimeout(() => setShineActive(false), 3550)
     return () => [t1,t2,t3,t4,t5].forEach(clearTimeout)
   }, [screen, revealIndex])
 
@@ -89,6 +89,7 @@ export default function Packs({ token }) {
   if (screen === 'opening') {
     const card = revealedCards[revealIndex]
     const { glow, flash: flashColor } = getCardColor(card)
+    const rgbBase = flashColor.match(/rgba?\((\d+,\s*\d+,\s*\d+)/)?.[1] || '88,101,242'
     // Convert box-shadow glow to drop-shadow filter (follows card shape, not rectangle)
     const dropShadow = glow.split(', ').map(s => {
       const m = s.match(/rgba?\([^)]+\)/)
@@ -128,8 +129,8 @@ export default function Packs({ token }) {
             to   { transform: translateY(0) scale(1); opacity: 1; }
           }
           @keyframes backPulse {
-            0%,100% { box-shadow: 0 0 20px rgba(88,101,242,0.4); }
-            50%      { box-shadow: 0 0 50px rgba(88,101,242,0.9), 0 0 80px rgba(88,101,242,0.3); }
+            0%,100% { box-shadow: 0 0 20px rgba(${rgbBase},0.4); }
+            50%      { box-shadow: 0 0 50px rgba(${rgbBase},0.9), 0 0 80px rgba(${rgbBase},0.3); }
           }
         `}</style>
 
