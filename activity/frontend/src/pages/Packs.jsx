@@ -39,6 +39,8 @@ export default function Packs({ token }) {
   const [phase, setPhase]         = useState('shake') // shake | flash | reveal
   const [flipped, setFlipped]     = useState(false)
   const [shineActive, setShineActive] = useState(false)
+  const [flippedCards, setFlippedCards] = useState([])
+  const [lastFlipped, setLastFlipped]   = useState(null)
   const [loading, setLoading]     = useState(false)
   const [error, setError]         = useState(null)
 
@@ -69,12 +71,24 @@ export default function Packs({ token }) {
       const cards = await apiFetch(`/api/packs/open/${packType}`, token, { method: 'POST' })
       await preloadImages(cards.map(c => c.image_url))
       setRevealedCards(cards)
-      setRevealIndex(0)
       setOpeningPack(packType)
-      setScreen('opening')
+      if (cards.length > 1) {
+        setFlippedCards([])
+        setLastFlipped(null)
+        setScreen('fan')
+      } else {
+        setRevealIndex(0)
+        setScreen('opening')
+      }
       fetchPacks()
     } catch (e) { setError(e.message) }
     setLoading(false)
+  }
+
+  function flipCard(index) {
+    setFlippedCards(prev => [...prev, index])
+    setLastFlipped(index)
+    setTimeout(() => setLastFlipped(p => p === index ? null : p), 750)
   }
 
   function nextCard() {
@@ -83,6 +97,90 @@ export default function Packs({ token }) {
     } else {
       setScreen('result')
     }
+  }
+
+  /* ── FAN REVEAL (multi-card packs) ── */
+  if (screen === 'fan') {
+    const total = revealedCards.length
+    const flippedCount = flippedCards.length
+    const allFlipped = flippedCount === total
+    const packLabel = PACK_META[openingPack]?.label
+    const ROTS = [-5, 4, -3, 5, -2, 4, -4, 2, -5, 3, 3, -2]
+
+    return (
+      <div style={{ position: 'fixed', inset: 0, background: '#050914', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 20, overflow: 'hidden', padding: '20px 12px' }}>
+        <style>{`
+          @keyframes dealIn {
+            from { transform: translateY(80px) scale(0.72); opacity: 0; }
+            to   { transform: none; opacity: 1; }
+          }
+          @keyframes shineSweep {
+            0%   { left: -60%; opacity: 0; }
+            10%  { opacity: 0.7; }
+            90%  { opacity: 0.7; }
+            100% { left: 130%; opacity: 0; }
+          }
+        `}</style>
+
+        <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)', letterSpacing: 2, textAlign: 'center' }}>
+          {packLabel} &nbsp;·&nbsp; {allFlipped ? 'All revealed!' : `Tap a card to reveal · ${flippedCount} / ${total}`}
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, width: '100%', maxWidth: 480 }}>
+          {revealedCards.map((card, i) => {
+            const isFlipped = flippedCards.includes(i)
+            const isLast = lastFlipped === i
+            const rot = ROTS[i % ROTS.length]
+            const { glow } = getCardColor(card)
+            const ds = glow.split(', ').map(s => {
+              const m = s.match(/rgba?\([^)]+\)/)
+              const parts = s.trim().split(/\s+/)
+              return `drop-shadow(0 0 ${parts[2] || '20px'} ${m?.[0] || 'gold'})`
+            }).join(' ')
+
+            return (
+              <div
+                key={i}
+                onClick={() => !isFlipped && flipCard(i)}
+                style={{ animation: `dealIn 0.45s cubic-bezier(0.34,1.3,0.64,1) ${i * 0.09}s both`, cursor: isFlipped ? 'default' : 'pointer' }}
+              >
+                <div style={{ perspective: 700 }}>
+                  <div style={{
+                    transformStyle: 'preserve-3d',
+                    transition: 'transform 0.55s cubic-bezier(0.4,0,0.2,1)',
+                    transform: isFlipped ? 'rotate(0deg) rotateY(0deg)' : `rotate(${rot}deg) rotateY(180deg)`,
+                    position: 'relative', borderRadius: 10,
+                  }}>
+                    {/* Card front */}
+                    <div style={{ backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden', borderRadius: 10, overflow: 'hidden', position: 'relative', filter: isFlipped ? ds : 'none', transition: 'filter 0.4s ease' }}>
+                      <FutCard card={card} />
+                      {isLast && (
+                        <div style={{ position: 'absolute', top: 0, bottom: 0, width: '45%', background: 'linear-gradient(to right, transparent, rgba(255,255,255,0.55), transparent)', transform: 'skewX(-12deg)', animation: 'shineSweep 0.65s ease forwards', pointerEvents: 'none' }} />
+                      )}
+                    </div>
+                    {/* Card back */}
+                    <div style={{ position: 'absolute', inset: 0, backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden', transform: 'rotateY(180deg)', background: 'linear-gradient(135deg,#1e3a5f,#0f1f3d)', borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <span style={{ fontSize: 28 }}>⚽</span>
+                    </div>
+                  </div>
+                </div>
+                {isFlipped && (
+                  <div style={{ textAlign: 'center', marginTop: 4, fontSize: 10, color: { Common: '#94a3b8', Uncommon: '#22c55e', Rare: '#f0c040' }[card.card_rarity] || '#aaa', fontWeight: 600 }}>
+                    {card.card_rarity}
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+
+        {allFlipped && (
+          <button className="btn-primary anim-fadeUp" onClick={() => setScreen('result')}>
+            See All Cards
+          </button>
+        )}
+      </div>
+    )
   }
 
   /* ── PACK OPENING ANIMATION ── */
