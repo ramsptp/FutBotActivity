@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { apiFetch, preloadImages } from '../lib/api'
 import FutCard from '../components/FutCard'
+import HowToPlayModal from '../components/HowToPlayModal'
+import PageTip from '../components/PageTip'
+import PageHelp from '../components/PageHelp'
 
 const STAT_LABEL = { attack: 'Attack', defense: 'Defense', speed: 'Speed' }
 const STAT_ICON  = { attack: '⚔️', defense: '🛡️', speed: '💨' }
@@ -19,6 +22,7 @@ export default function Battle({ token, participants = [], incomingChallenge, se
   const [opponentRequestedRematch, setOpponentRequestedRematch] = useState(false)
   const [surrenderConfirm, setSurrenderConfirm] = useState(false)
   const [showAcceptScreen, setShowAcceptScreen] = useState(false)
+  const [showHowToPlay, setShowHowToPlay] = useState(false)
 
   // Game state
   const [picksStatThisRound, setPicksStatThisRound] = useState(false)
@@ -185,6 +189,9 @@ export default function Battle({ token, participants = [], incomingChallenge, se
     setRematchRequested(false); setOpponentRequestedRematch(false); setError(null)
   }
 
+  /* ── HOW TO PLAY MODAL ── */
+  const howToPlayModal = showHowToPlay && <HowToPlayModal onClose={() => setShowHowToPlay(false)} battleFocus />
+
   /* ── VS SPLASH — must be first so it overlays any screen ── */
   if (showVS) return (
     <div style={{ position: 'fixed', inset: 0, background: 'linear-gradient(135deg,#0a0e1a,#1a0a2e)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', zIndex: 200 }}>
@@ -297,6 +304,8 @@ export default function Battle({ token, participants = [], incomingChallenge, se
   /* ── LOBBY ── */
   if (screen === 'lobby') return (
     <div style={L.root}>
+      <PageTip page="battle" />
+      <PageHelp page="battle" />
       <style>{`
         @keyframes tunnelGlow { 0%,100%{opacity:0.6} 50%{opacity:1} }
         @keyframes slideRow { from{opacity:0;transform:translateX(-20px)} to{opacity:1;transform:translateX(0)} }
@@ -417,7 +426,8 @@ export default function Battle({ token, participants = [], incomingChallenge, se
   /* ── STAT SELECTION (host) ── */
   if (screen === 'stat_selection') return (
     <div className="page">
-      <BattleBar round={round} score={score} opponent={opponentName} onSurrender={{ start: surrender, confirm: surrender, cancel: () => setSurrenderConfirm(false), confirming: surrenderConfirm }} />
+      {howToPlayModal}
+      <BattleBar round={round} score={score} opponent={opponentName} onSurrender={{ start: surrender, confirm: surrender, cancel: () => setSurrenderConfirm(false), confirming: surrenderConfirm }} onHowToPlay={() => setShowHowToPlay(true)} />
       <div style={{ color: 'var(--muted)', fontSize: 13, marginBottom: 12, textAlign: 'center' }}>
         Round {round} — choose your stat
       </div>
@@ -442,7 +452,8 @@ export default function Battle({ token, participants = [], incomingChallenge, se
   /* ── WAITING FOR STAT (guest) ── */
   if (screen === 'waiting_for_stat') return (
     <div className="page">
-      <BattleBar round={round} score={score} opponent={opponentName} onSurrender={{ start: surrender, confirm: surrender, cancel: () => setSurrenderConfirm(false), confirming: surrenderConfirm }} />
+      {howToPlayModal}
+      <BattleBar round={round} score={score} opponent={opponentName} onSurrender={{ start: surrender, confirm: surrender, cancel: () => setSurrenderConfirm(false), confirming: surrenderConfirm }} onHowToPlay={() => setShowHowToPlay(true)} />
       <div style={{ textAlign: 'center', color: 'var(--muted)', fontSize: 14, marginBottom: 20, padding: '12px', background: 'var(--surface)', borderRadius: 10, border: '1px solid var(--border)' }}>
         ⏳ {opponentName} is choosing their stat…
       </div>
@@ -453,7 +464,8 @@ export default function Battle({ token, participants = [], incomingChallenge, se
   /* ── PICKING ── */
   if (screen === 'picking') return (
     <div className="page">
-      <BattleBar round={round} score={score} opponent={opponentName} onSurrender={{ start: surrender, confirm: surrender, cancel: () => setSurrenderConfirm(false), confirming: surrenderConfirm }} />
+      {howToPlayModal}
+      <BattleBar round={round} score={score} opponent={opponentName} onSurrender={{ start: surrender, confirm: surrender, cancel: () => setSurrenderConfirm(false), confirming: surrenderConfirm }} onHowToPlay={() => setShowHowToPlay(true)} />
 
       {/* Active stat display */}
       <div style={{ textAlign: 'center', marginBottom: 16 }}>
@@ -675,10 +687,11 @@ const L = {
 
 /* ── Sub-components ── */
 
-function BattleBar({ round, score, opponent, onSurrender }) {
+function BattleBar({ round, score, opponent, onSurrender, onHowToPlay }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, padding: '8px 14px', marginBottom: 14, gap: 8 }}>
       <span style={{ fontSize: 13, color: 'var(--muted)' }}>Round {round}/5</span>
+      {onHowToPlay && <button onClick={onHowToPlay} style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.15)', borderRadius: '50%', width: 22, height: 22, color: 'rgba(255,255,255,0.5)', fontSize: 11, fontWeight: 700, cursor: 'pointer', flexShrink: 0, padding: 0 }}>?</button>}
       <div style={{ marginLeft: 'auto', fontSize: 20, fontWeight: 800, color: '#fff', letterSpacing: 2 }}>
         {score.you} <span style={{ color: 'var(--muted)', fontWeight: 300 }}>—</span> {score.opponent}
       </div>

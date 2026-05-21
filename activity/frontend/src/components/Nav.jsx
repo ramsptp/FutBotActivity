@@ -30,6 +30,7 @@ export default function Nav({ page, setPage, participants = [], user, token, set
             return (
               <button
                 key={tab.id}
+                id={`tutorial-nav-${tab.id}`}
                 onClick={() => setPage(tab.id)}
                 style={{ ...s.item, color: active ? '#ffca45' : 'rgba(255,255,255,0.9)' }}
               >

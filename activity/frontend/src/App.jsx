@@ -10,12 +10,14 @@ import Packs from './pages/Packs'
 import Shop from './pages/Shop'
 import LoadingScreen from './components/LoadingScreen'
 import ChallengeNotification from './components/ChallengeNotification'
+import TutorialOverlay from './components/TutorialOverlay'
 
 function App() {
   const [auth, setAuth] = useState(null)
   const [error, setError] = useState(null)
   const [page, setPage] = useState('home')
   const [starterCards, setStarterCards] = useState(null)
+  const [tutorialStep, setTutorialStep] = useState(0)
   const [battleMode, setBattleMode] = useState('match') // 'match' | 'friend'
   const [autoChallenge, setAutoChallenge] = useState(null) // participant to auto-challenge
   const [participants, setParticipants] = useState([])
@@ -51,6 +53,9 @@ function App() {
       const result = await discordSdk.commands.authenticate({ access_token })
       setAuth({ ...result, access_token })
       startLobby(access_token)
+      // Load tutorial step
+      const me = await fetch('/api/me', { headers: { Authorization: `Bearer ${access_token}` } }).then(r => r.json()).catch(() => null)
+      if (me?.player?.tutorial_step != null) setTutorialStep(me.player.tutorial_step)
     } catch (e) {
       setError(e.message)
     }
@@ -77,6 +82,13 @@ function App() {
     pollRef.current = setInterval(() => { register(); fetchParticipants() }, 5000)
   }
 
+  async function advanceTutorial(nextStep) {
+    setTutorialStep(nextStep)
+    apiFetch('/api/tutorial', auth?.access_token, { method: 'PUT', body: JSON.stringify({ step: nextStep }) }).catch(() => {})
+  }
+
+  function skipTutorial() { advanceTutorial(99) }
+
   if (error) return <LoadingScreen message={error} error />
   if (!auth) return <LoadingScreen />
 
@@ -90,10 +102,10 @@ function App() {
       minHeight: '100svh',
       background: "url('/background.png') center center / cover no-repeat fixed",
     } : undefined}>
-      {page === 'home' && <Home token={token} user={user} setPage={setPage} participants={participants} setBattleMode={setBattleMode} onStarterClaim={cards => { setStarterCards(cards); setPage('packs') }} />}
+      {page === 'home' && <Home token={token} user={user} setPage={setPage} participants={participants} setBattleMode={setBattleMode} onStarterClaim={cards => { setStarterCards(cards); setTutorialStep(1); setPage('packs') }} tutorialStep={tutorialStep} onTutorialAdvance={advanceTutorial} onTutorialSkip={skipTutorial} />}
       {page === 'collection' && <Collection token={token} />}
-      {page === 'decks' && <DeckBuilder token={token} />}
-      {page === 'packs' && <Packs token={token} starterCards={starterCards} onStarterDone={() => { setStarterCards(null); setPage('decks') }} />}
+      {page === 'decks' && <DeckBuilder token={token} tutorialStep={tutorialStep} onTutorialAdvance={advanceTutorial} />}
+      {page === 'packs' && <Packs token={token} starterCards={starterCards} onStarterDone={() => { setStarterCards(null); setPage('decks') }} tutorialStep={tutorialStep} onTutorialAdvance={advanceTutorial} />}
       {page === 'shop' && <Shop token={token} />}
       {page === 'battle' && (
         <Battle
@@ -118,6 +130,15 @@ function App() {
           FUT<span style={{ color: '#a855f7' }}>BOT</span>
         </span>
       </div>
+
+      {/* Tutorial overlay — steps 1-6 */}
+      {tutorialStep > 0 && tutorialStep <= 2 && (
+        <TutorialOverlay
+          step={tutorialStep}
+          onNext={() => advanceTutorial(tutorialStep + 1)}
+          onSkip={skipTutorial}
+        />
+      )}
 
       {/* Global challenge notification — shows on any page */}
       <ChallengeNotification

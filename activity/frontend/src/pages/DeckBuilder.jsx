@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react'
 import { apiFetch } from '../lib/api'
 import FutCard from '../components/FutCard'
+import PageTip from '../components/PageTip'
+import PageHelp from '../components/PageHelp'
 
 const DECK_SIZE = 5
 const POSITIONS = ['All', 'Forward', 'Midfielder', 'Defender']
 const RARITIES  = ['All', 'Common', 'Uncommon', 'Rare']
 
-export default function DeckBuilder({ token }) {
+export default function DeckBuilder({ token, tutorialStep = 0, onTutorialAdvance = null }) {
   const [decks, setDecks]         = useState([])
   const [activeDeck, setActiveDeck] = useState(null)
   const [deckName, setDeckName]   = useState('')
@@ -64,9 +66,13 @@ export default function DeckBuilder({ token }) {
   /* ── LIST VIEW ── */
   if (view === 'list') return (
     <div className="page">
+      <PageTip page="decks" />
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-        <h2 style={{ color: '#fff', fontWeight: 700, fontSize: 20 }}>My Decks</h2>
-        <button onClick={openNew} style={{ background: 'var(--accent)', border: 'none', borderRadius: 8, color: '#fff', padding: '7px 14px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>+ New</button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <h2 style={{ color: '#fff', fontWeight: 700, fontSize: 20 }}>My Decks</h2>
+          <PageHelp page="decks" />
+        </div>
+        <button id="tutorial-new-deck" onClick={() => { openNew(); if (tutorialStep === 2) onTutorialAdvance?.(99) }} style={{ background: 'var(--accent)', border: 'none', borderRadius: 8, color: '#fff', padding: '7px 14px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>+ New</button>
       </div>
       {decks.length === 0 ? (
         <p style={{ color: 'var(--muted)', textAlign: 'center', paddingTop: 40 }}>No decks yet. Create one to battle!</p>
@@ -82,7 +88,7 @@ export default function DeckBuilder({ token }) {
           </div>
           {/* Mini card strip */}
           <div style={{ display: 'flex', gap: 3 }}>
-            {deck.cards.slice(0, 4).map((c, i) => (
+            {deck.cards.slice(0, 5).map((c, i) => (
               <div key={i} style={{ width: 28, borderRadius: 4, overflow: 'hidden' }}>
                 <FutCard card={c} />
               </div>
@@ -99,34 +105,37 @@ export default function DeckBuilder({ token }) {
 
   return (
     <div className="page">
-      {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
-        <button onClick={() => setView('list')} style={{ background: 'transparent', border: 'none', color: 'var(--accent)', fontSize: 20, cursor: 'pointer', padding: 0 }}>‹</button>
-        <input value={deckName} onChange={e => setDeckName(e.target.value)} placeholder="Deck name"
-          style={{ flex: 1, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, color: '#fff', padding: '8px 12px', fontSize: 14 }} />
+      {/* Back button */}
+      <button onClick={() => setView('list')} style={{ background: 'transparent', border: 'none', color: 'var(--accent)', fontSize: 20, cursor: 'pointer', padding: '0 0 10px', display: 'block' }}>‹ Back</button>
+
+      {/* Deck slots + name input — centred column */}
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: 6 }}>
+        <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+          {Array.from({ length: DECK_SIZE }).map((_, i) => {
+            const card = inDeck[i]
+            return (
+              <div key={i} onClick={() => card && removeCard(card.card_id)} style={{
+                width: 125, flexShrink: 0, borderRadius: 8, overflow: 'hidden',
+                cursor: card ? 'pointer' : 'default',
+                border: `2px dashed ${card ? 'var(--accent)' : 'rgba(255,255,255,0.1)'}`,
+                aspectRatio: '300 / 420',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                background: 'rgba(255,255,255,0.02)',
+              }}>
+                {card
+                  ? <img src={card.image_url} alt={card.name} style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'top', display: 'block' }} />
+                  : <span style={{ color: 'rgba(255,255,255,0.15)', fontSize: 22 }}>+</span>
+                }
+              </div>
+            )
+          })}
+        </div>
+
+        {/* Name input — same width as slots row */}
+        <input value={deckName} onChange={e => setDeckName(e.target.value)} placeholder="Enter deck name"
+          style={{ width: 'calc(5 * 125px + 4 * 8px)', maxWidth: '100%', background: 'rgba(255,255,255,0.18)', border: '1.5px solid rgba(168,85,247,0.75)', borderRadius: 8, color: '#fff', padding: '9px 14px', fontSize: 14, fontWeight: 700, outline: 'none' }} />
       </div>
 
-      {/* Deck slots */}
-      <div style={{ display: 'flex', gap: 8, marginBottom: 6, justifyContent: 'center' }}>
-        {Array.from({ length: DECK_SIZE }).map((_, i) => {
-          const card = inDeck[i]
-          return (
-            <div key={i} onClick={() => card && removeCard(card.card_id)} style={{
-              width: 125, flexShrink: 0, borderRadius: 8, overflow: 'hidden',
-              cursor: card ? 'pointer' : 'default',
-              border: `2px dashed ${card ? 'var(--accent)' : 'rgba(255,255,255,0.1)'}`,
-              aspectRatio: '300 / 420',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              background: 'rgba(255,255,255,0.02)',
-            }}>
-              {card
-                ? <img src={card.image_url} alt={card.name} style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'top', display: 'block' }} />
-                : <span style={{ color: 'rgba(255,255,255,0.15)', fontSize: 22 }}>+</span>
-              }
-            </div>
-          )
-        })}
-      </div>
       <div style={{ fontSize: 11, color: 'var(--muted)', textAlign: 'center', marginBottom: 12 }}>
         {inDeck.length}/{DECK_SIZE} · tap slot to remove
       </div>
@@ -157,7 +166,7 @@ export default function DeckBuilder({ token }) {
         {activeDeck.deck_name && (
           <button onClick={() => deleteDeck(activeDeck.deck_name)} style={{ background: '#7f1d1d', border: 'none', borderRadius: 8, color: '#fff', padding: '10px 14px', cursor: 'pointer', fontSize: 13 }}>Delete</button>
         )}
-        <button className="btn-primary" onClick={saveDeck} disabled={saving} style={{ flex: 1 }}>
+        <button id="tutorial-save-deck" className="btn-primary" onClick={saveDeck} disabled={saving} style={{ flex: 1 }}>
           {saving ? 'Saving…' : 'Save Deck'}
         </button>
       </div>

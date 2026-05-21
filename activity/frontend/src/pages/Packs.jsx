@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { apiFetch, preloadImages } from '../lib/api'
 import FutCard from '../components/FutCard'
+import PageTip from '../components/PageTip'
+import PageHelp from '../components/PageHelp'
 
 const PACK_META = {
   rare_player_pack: { label: 'Rare Player Pack', img: '/rarepack.png', desc: '1 Rare or Special card (85+ OVR)' },
@@ -48,7 +50,7 @@ function calcValue(card) {
   return value
 }
 
-export default function Packs({ token, starterCards = null, onStarterDone = null }) {
+export default function Packs({ token, starterCards = null, onStarterDone = null, tutorialStep = 0, onTutorialAdvance = null }) {
   const [packs, setPacks]         = useState(null)
   const [screen, setScreen]       = useState('list')
   const [openingPack, setOpeningPack] = useState(null)
@@ -67,6 +69,7 @@ export default function Packs({ token, starterCards = null, onStarterDone = null
   const [featuredGlowPhase, setFeaturedGlowPhase] = useState('none')
   const [featuredShowBack, setFeaturedShowBack] = useState(false)
   const featuredTimers = useRef([])
+  const openingTimers  = useRef([])
   const [statStep, setStatStep]   = useState(0)
   const [glowPhase, setGlowPhase] = useState('none')
   const [loading, setLoading]     = useState(false)
@@ -107,7 +110,8 @@ export default function Packs({ token, starterCards = null, onStarterDone = null
     const t9  = setTimeout(() => setShineActive(true), 7000)
     const t10 = setTimeout(() => { setShineActive(false); setGlowPhase('entry') }, 7700)
     const t11 = setTimeout(() => setGlowPhase('cycle'), 8700)
-    return () => [t1,t2,t3,t4,t5,t6,t7,t8,t9,t10,t11].forEach(clearTimeout)
+    openingTimers.current = [t1,t2,t3,t4,t5,t6,t7,t8,t9,t10,t11]
+    return () => openingTimers.current.forEach(clearTimeout)
   }, [screen, revealIndex])
 
   async function fetchPacks() {
@@ -180,10 +184,19 @@ export default function Packs({ token, starterCards = null, onStarterDone = null
 
   function nextCard() {
     if (revealIndex < revealedCards.length - 1) {
-      setRevealIndex(i => i + 1) // useEffect handles the animation reset
+      setRevealIndex(i => i + 1)
     } else {
       setScreen('result')
     }
+  }
+
+  function skipOpening() {
+    openingTimers.current.forEach(clearTimeout)
+    setPhase('stats')
+    setStatStep(5)
+    setFlipped(true)
+    setGlowPhase('cycle')
+    setShineActive(false)
   }
 
   /* ── FAN REVEAL (multi-card packs) ── */
@@ -286,7 +299,7 @@ export default function Packs({ token, starterCards = null, onStarterDone = null
             </button>
           )}
           {allFlipped && !featuredCard && (
-            <button onClick={() => setScreen('result')} className="anim-fadeUp" style={{ background: 'linear-gradient(135deg,#7c3aed,#a855f7)', border: 'none', borderRadius: 10, color: '#fff', padding: '8px 20px', fontSize: 14, fontWeight: 800, cursor: 'pointer', flexShrink: 0, animation: 'seeAllPulse 1.4s ease infinite' }}>
+            <button id="tutorial-see-all" onClick={() => { setScreen('result'); if (tutorialStep === 1) onTutorialAdvance?.(2) }} className="anim-fadeUp" style={{ background: 'linear-gradient(135deg,#7c3aed,#a855f7)', border: 'none', borderRadius: 10, color: '#fff', padding: '8px 20px', fontSize: 14, fontWeight: 800, cursor: 'pointer', flexShrink: 0, animation: 'seeAllPulse 1.4s ease infinite' }}>
               See All Cards →
             </button>
           )}
@@ -418,6 +431,11 @@ export default function Packs({ token, starterCards = null, onStarterDone = null
                 </div>
               </div>
             )}
+            {!featuredFlipped && (
+              <button onClick={dismissFeatured} style={{ position: 'absolute', bottom: 90, left: '50%', transform: 'translateX(-50%)', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.25)', borderRadius: 20, color: 'rgba(255,255,255,0.7)', padding: '8px 28px', fontSize: 14, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                Skip →
+              </button>
+            )}
             {featuredShowBack && (
               <button className="btn-primary anim-fadeUp" onClick={dismissFeatured} style={{ maxWidth: 260 }}>
                 Back to Pack
@@ -515,6 +533,13 @@ export default function Packs({ token, starterCards = null, onStarterDone = null
         {/* Rarity flash overlay */}
         {phase === 'flash' && (
           <div style={{ position: 'fixed', inset: 0, background: flashColor, animation: 'flashBurst 0.3s ease forwards', pointerEvents: 'none', zIndex: 10 }} />
+        )}
+
+        {/* Skip button — only while animating */}
+        {!flipped && (
+          <button onClick={skipOpening} style={{ position: 'absolute', bottom: 90, left: '50%', transform: 'translateX(-50%)', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.25)', borderRadius: 20, color: 'rgba(255,255,255,0.7)', padding: '8px 28px', fontSize: 14, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+            Skip →
+          </button>
         )}
 
         {/* Counter */}
@@ -642,16 +667,21 @@ export default function Packs({ token, starterCards = null, onStarterDone = null
     <ResultScreen
       cards={revealedCards}
       token={token}
-      onBack={openingPack === 'starter_pack' && onStarterDone ? onStarterDone : () => setScreen('list')}
+      onBack={() => { if (openingPack === 'starter_pack' && onStarterDone) { onStarterDone() } else setScreen('list') }}
       backLabel={openingPack === 'starter_pack' ? 'Build Your First Deck →' : 'Back to Packs'}
       isStarter={openingPack === 'starter_pack'}
+      tutorialStep={tutorialStep}
     />
   )
 
   /* ── PACK LIST ── */
   return (
     <div className="page">
-      <h2 style={{ color: '#fff', fontWeight: 700, fontSize: 20, marginBottom: 16 }}>📦 My Packs</h2>
+      <PageTip page="packs" />
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+        <h2 style={{ color: '#fff', fontWeight: 700, fontSize: 20 }}>📦 My Packs</h2>
+        <PageHelp page="packs" />
+      </div>
       {error && <div style={{ background: '#3d1515', color: '#f87171', borderRadius: 8, padding: '8px 12px', marginBottom: 12, fontSize: 13 }}>{error}</div>}
       {!packs ? (
         <p style={{ color: 'var(--muted)', textAlign: 'center', paddingTop: 40 }}>Loading…</p>
@@ -704,7 +734,7 @@ export default function Packs({ token, starterCards = null, onStarterDone = null
   )
 }
 
-function ResultScreen({ cards, token, onBack, backLabel = 'Back to Packs', isStarter = false }) {
+function ResultScreen({ cards, token, onBack, backLabel = 'Back to Packs', isStarter = false, tutorialStep = 0 }) {
   const [sold, setSold]         = useState({})
   const [confirming, setConfirming] = useState(null) // card_id being confirmed
   const [toast, setToast]       = useState(null)
@@ -760,7 +790,7 @@ function ResultScreen({ cards, token, onBack, backLabel = 'Back to Packs', isSta
           )
         })}
       </div>
-      <button className="btn-primary" onClick={onBack}>{backLabel}</button>
+      <button id={isStarter ? 'tutorial-build-deck' : undefined} className="btn-primary" onClick={onBack}>{backLabel}</button>
     </div>
   )
 }

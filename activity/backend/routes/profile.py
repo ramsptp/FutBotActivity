@@ -72,3 +72,15 @@ async def set_title(body: SetTitleBody, discord_user=Depends(get_current_user)):
                (body.title if body.title else None, user_id))
     db.commit()
     return {"status": "updated"}
+
+
+class SetTutorialBody(BaseModel):
+    step: int
+
+@router.put("/tutorial")
+async def set_tutorial(body: SetTutorialBody, discord_user=Depends(get_current_user)):
+    user_id = int(discord_user["id"])
+    db = get_db()
+    db.execute("UPDATE players SET tutorial_step = ? WHERE user_id = ?", (body.step, user_id))
+    db.commit()
+    return {"status": "updated"}

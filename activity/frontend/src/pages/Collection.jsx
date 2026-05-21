@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { apiFetch } from '../lib/api'
 import FutCard from '../components/FutCard'
+import PageHelp from '../components/PageHelp'
+import PageTip from '../components/PageTip'
 
 const RARITIES  = ['All', 'Common', 'Uncommon', 'Rare']
 const POSITIONS = ['All', 'Forward', 'Midfielder', 'Defender']
@@ -31,8 +33,10 @@ export default function Collection({ token }) {
 
   return (
     <div className="page">
+      <PageTip page="collection" />
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 14 }}>
         <h2 style={{ color: '#fff', fontSize: 20, fontWeight: 700 }}>My Collection</h2>
+        <PageHelp page="collection" />
         <span style={{ color: 'var(--muted)', fontSize: 14 }}>{cards.length} cards</span>
       </div>
 

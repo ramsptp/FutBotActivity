@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { apiFetch } from '../lib/api'
 import FutCard from '../components/FutCard'
+import PageHelp from '../components/PageHelp'
+import PageTip from '../components/PageTip'
 
 const TABS = ['Buy Packs', 'Sell Cards']
 
@@ -56,6 +58,7 @@ export default function Shop({ token }) {
 
   return (
     <div className="page">
+      <PageTip page="shop" />
       {/* Toast */}
       {toast && (
         <div style={{
@@ -70,7 +73,10 @@ export default function Shop({ token }) {
 
       {/* Coin balance */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-        <h2 style={{ color: '#fff', fontWeight: 700, fontSize: 20 }}>🛒 Shop</h2>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <h2 style={{ color: '#fff', fontWeight: 700, fontSize: 20 }}>🛒 Shop</h2>
+          <PageHelp page="shop" />
+        </div>
         <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 20, padding: '6px 14px', fontSize: 14, fontWeight: 700, color: 'var(--gold)' }}>
           🪙 {coins?.toLocaleString() ?? '…'}
         </div>

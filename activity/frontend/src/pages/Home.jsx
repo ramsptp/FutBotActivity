@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { apiFetch } from '../lib/api'
 import OnlinePanel from '../components/OnlinePanel'
 import ProfileModal from '../components/ProfileModal'
+import HowToPlayModal from '../components/HowToPlayModal'
 
 const NAV = [
   { id: 'home',       icon: 'home',         label: 'Home' },
@@ -21,11 +22,12 @@ const EMBERS = [
   { left: '92%', size: 5,  delay: '5s',  dur: '7s' },
 ]
 
-export default function Home({ token, user, setPage, participants = [], setBattleMode, onStarterClaim }) {
+export default function Home({ token, user, setPage, participants = [], setBattleMode, onStarterClaim, tutorialStep = 0, onTutorialAdvance, onTutorialSkip }) {
   const [player, setPlayer]             = useState(null)
   const [packs, setPacks]               = useState(null)
   const [showOnlinePanel, setShowOnlinePanel] = useState(false)
   const [showProfile, setShowProfile] = useState(false)
+  const [showHowToPlay, setShowHowToPlay] = useState(false)
 
   useEffect(() => {
     apiFetch('/api/me', token).then(async data => {
@@ -52,6 +54,8 @@ export default function Home({ token, user, setPage, participants = [], setBattl
           onTitleChange={title => setPlayer(p => ({ ...p, display_title: title || null }))}
         />
       )}
+
+      {showHowToPlay && <HowToPlayModal onClose={() => setShowHowToPlay(false)} />}
 
       {/* Ember particles */}
       <div style={s.embers}>
@@ -81,6 +85,8 @@ export default function Home({ token, user, setPage, participants = [], setBattl
 
         {/* Currency + Profile */}
         <div style={s.topRight}>
+          {/* How to Play */}
+          <button onClick={() => setShowHowToPlay(true)} style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: '50%', width: 32, height: 32, color: 'rgba(255,255,255,0.7)', fontSize: 14, fontWeight: 700, cursor: 'pointer', flexShrink: 0 }}>?</button>
           {/* Currency pill */}
           <div style={s.currencyPill}>
             <div style={s.coinBlock}>
@@ -160,7 +166,7 @@ export default function Home({ token, user, setPage, participants = [], setBattl
             {NAV.map(tab => {
               const active = tab.id === 'home'
               return (
-                <button key={tab.id} onClick={() => setPage(tab.id)} style={{ ...s.navItem, color: active ? '#ffca45' : 'rgba(255,255,255,0.45)' }}>
+                <button key={tab.id} id={`tutorial-nav-${tab.id}`} onClick={() => setPage(tab.id)} style={{ ...s.navItem, color: active ? '#ffca45' : 'rgba(255,255,255,0.45)' }}>
                   <span className="material-symbols-outlined" style={{ fontSize: 20, fontVariationSettings: active ? "'FILL' 1" : "'FILL' 0" }}>{tab.icon}</span>
                   <span style={{ fontSize: 13, textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: active ? 700 : 400 }}>{tab.label}</span>
                   {active && <div style={s.activeLine} />}
