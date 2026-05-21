@@ -9,17 +9,54 @@ const PACK_META = {
   tester_pack:      { label: 'Tester Pack',        img: null,            desc: '1 Icon + 4 high-rated cards' },
 }
 
+function getCardColor(card) {
+  const r = card?.card_rarity, t = card?.card_type
+  if (r === 'Common')   return { flash: 'rgba(180,180,200,0.45)', glow: '0 0 24px rgba(180,180,200,0.5)' }
+  if (r === 'Uncommon') return { flash: 'rgba(180,150,0,0.4)',    glow: '0 0 30px rgba(180,150,0,0.6)' }
+  if (r === 'Rare') {
+    if (t === 'Icon')              return { flash: 'rgba(255,255,255,0.6)',    glow: '0 0 50px rgba(255,255,255,0.9), 0 0 100px rgba(255,255,255,0.4)' }
+    if (t === 'Hero')              return { flash: 'rgba(255,80,200,0.5)',     glow: '0 0 50px rgba(255,80,200,0.8), 0 0 100px rgba(255,80,200,0.35)' }
+    if (t === 'Copa America TOTT') return { flash: 'rgba(0,120,255,0.45)',    glow: '0 0 50px rgba(0,120,255,0.8), 0 0 100px rgba(0,120,255,0.35)' }
+    if (t === 'Euro TOTT')         return { flash: 'rgba(255,110,0,0.5)',     glow: '0 0 50px rgba(255,110,0,0.8), 0 0 100px rgba(255,110,0,0.35)' }
+    return { flash: 'rgba(240,192,64,0.55)', glow: '0 0 50px rgba(240,192,64,0.9), 0 0 100px rgba(240,192,64,0.45)' }
+  }
+  return { flash: 'rgba(240,192,64,0.45)', glow: '0 0 30px rgba(240,192,64,0.5)' }
+}
+
+function calcValue(card) {
+  const type = (card.card_type || '').toLowerCase()
+  let value = type.includes('icon') ? 250 : type.includes('hero') ? 175 : 100
+  if (card.overall >= 70) value += 50 + (card.overall - 70) * 5
+  return value
+}
+
 export default function Packs({ token }) {
   const [packs, setPacks]         = useState(null)
   const [screen, setScreen]       = useState('list')
   const [openingPack, setOpeningPack] = useState(null)
   const [revealedCards, setRevealedCards] = useState([])
   const [revealIndex, setRevealIndex]     = useState(0)
+  const [phase, setPhase]         = useState('shake') // shake | flash | reveal
   const [flipped, setFlipped]     = useState(false)
+  const [shineActive, setShineActive] = useState(false)
   const [loading, setLoading]     = useState(false)
   const [error, setError]         = useState(null)
 
   useEffect(() => { fetchPacks() }, [])
+
+  // Restart animation sequence whenever a new card is shown
+  useEffect(() => {
+    if (screen !== 'opening') return
+    setPhase('shake')
+    setFlipped(false)
+    setShineActive(false)
+    const t1 = setTimeout(() => setPhase('flash'), 900)
+    const t2 = setTimeout(() => setPhase('reveal'), 1200)   // card appears face-down
+    const t3 = setTimeout(() => setFlipped(true), 2000)     // pause on back before flip
+    const t4 = setTimeout(() => setShineActive(true), 2650) // shine after flip lands
+    const t5 = setTimeout(() => setShineActive(false), 3350)
+    return () => [t1,t2,t3,t4,t5].forEach(clearTimeout)
+  }, [screen, revealIndex])
 
   async function fetchPacks() {
     const data = await apiFetch('/api/packs', token)
@@ -30,84 +67,151 @@ export default function Packs({ token }) {
     setLoading(true); setError(null)
     try {
       const cards = await apiFetch(`/api/packs/open/${packType}`, token, { method: 'POST' })
-      // Preload ALL card images before showing anything
       await preloadImages(cards.map(c => c.image_url))
-      setRevealedCards(cards); setRevealIndex(0); setFlipped(false)
-      setOpeningPack(packType); setScreen('opening')
+      setRevealedCards(cards)
+      setRevealIndex(0)
+      setOpeningPack(packType)
+      setScreen('opening')
       fetchPacks()
-      // Now image is already loaded — flip immediately
-      setTimeout(() => setFlipped(true), 300)
     } catch (e) { setError(e.message) }
     setLoading(false)
   }
 
   function nextCard() {
     if (revealIndex < revealedCards.length - 1) {
-      setFlipped(false)
-      // Image already preloaded — just animate
-      setTimeout(() => { setRevealIndex(i => i + 1); setFlipped(true) }, 300)
+      setRevealIndex(i => i + 1) // useEffect handles the animation reset
     } else {
       setScreen('result')
     }
   }
 
-  /* ── CARD FLIP REVEAL ── */
+  /* ── PACK OPENING ANIMATION ── */
   if (screen === 'opening') {
     const card = revealedCards[revealIndex]
+    const { glow, flash: flashColor } = getCardColor(card)
+    // Convert box-shadow glow to drop-shadow filter (follows card shape, not rectangle)
+    const dropShadow = glow.split(', ').map(s => {
+      const m = s.match(/rgba?\([^)]+\)/)
+      const parts = s.trim().split(/\s+/)
+      const color = m?.[0] || 'gold'
+      return `drop-shadow(0 0 ${parts[2] || '20px'} ${color})`
+    }).join(' ')
+    const packImg = PACK_META[openingPack]?.img
+    const packLabel = PACK_META[openingPack]?.label
+
     return (
-      <div className="page" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minHeight: '90svh', justifyContent: 'center', gap: 16 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', marginBottom: 8 }}>
-          <span style={{ fontSize: 16, fontWeight: 600 }}>{PACK_META[openingPack]?.icon} {PACK_META[openingPack]?.label}</span>
-          <span style={{ color: 'var(--muted)', fontSize: 14 }}>{revealIndex + 1} / {revealedCards.length}</span>
+      <div style={{ position: 'fixed', inset: 0, background: '#050914', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 20, overflow: 'hidden' }}>
+        <style>{`
+          @keyframes packShake {
+            0%  { transform: translateY(0) rotate(0deg) scale(1); }
+            15% { transform: translateY(-6px) rotate(-2deg) scale(1.02); }
+            30% { transform: translateY(0) rotate(2deg) scale(1); }
+            45% { transform: translateY(-6px) rotate(-1.5deg) scale(1.03); }
+            60% { transform: translateY(0) rotate(1.5deg) scale(1); }
+            75% { transform: translateY(-10px) rotate(0deg) scale(1.05); }
+            90% { transform: translateY(-30px) scale(1.08); opacity: 0.6; }
+            100%{ transform: translateY(-80px) scale(0.7); opacity: 0; }
+          }
+          @keyframes flashBurst {
+            0%   { opacity: 0; }
+            25%  { opacity: 1; }
+            100% { opacity: 0; }
+          }
+          @keyframes shineSweep {
+            0%   { left: -60%; opacity: 0; }
+            10%  { opacity: 0.7; }
+            90%  { opacity: 0.7; }
+            100% { left: 130%; opacity: 0; }
+          }
+          @keyframes cardEntrance {
+            from { transform: translateY(40px) scale(0.9); opacity: 0; }
+            to   { transform: translateY(0) scale(1); opacity: 1; }
+          }
+          @keyframes backPulse {
+            0%,100% { box-shadow: 0 0 20px rgba(88,101,242,0.4); }
+            50%      { box-shadow: 0 0 50px rgba(88,101,242,0.9), 0 0 80px rgba(88,101,242,0.3); }
+          }
+        `}</style>
+
+        {/* Rarity flash overlay */}
+        {phase === 'flash' && (
+          <div style={{ position: 'fixed', inset: 0, background: flashColor, animation: 'flashBurst 0.3s ease forwards', pointerEvents: 'none', zIndex: 10 }} />
+        )}
+
+        {/* Counter */}
+        <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)', letterSpacing: 2, position: 'absolute', top: 24 }}>
+          {packLabel} &nbsp;·&nbsp; {revealIndex + 1} / {revealedCards.length}
         </div>
 
-        {/* Flip container */}
-        <div style={{ width: '70%', maxWidth: 220, perspective: 800 }}>
-          <div style={{
-            width: '100%',
-            transformStyle: 'preserve-3d',
-            transition: 'transform 0.55s cubic-bezier(0.4,0,0.2,1)',
-            transform: flipped ? 'rotateY(0deg)' : 'rotateY(180deg)',
-            position: 'relative',
-          }}>
-            {/* Front — card */}
-            <div style={{ backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden' }}>
-              <FutCard card={card} />
-            </div>
-            {/* Back — card back design */}
-            <div style={{
-              position: 'absolute', inset: 0,
-              backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden',
-              transform: 'rotateY(180deg)',
-              background: 'linear-gradient(135deg, #1e3a5f, #0f1f3d)',
-              borderRadius: 10,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}>
-              <div style={{ fontSize: 36 }}>⚽</div>
-            </div>
-          </div>
-        </div>
-
-        {/* Card info — only shown after flip */}
-        {flipped && (
-          <div className="anim-fadeUp" style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: 18, fontWeight: 700 }}>{card.name}</div>
-            <div style={{ fontSize: 13, color: 'var(--muted)', margin: '4px 0 10px' }}>{card.card_rarity} · {card.card_type}</div>
-            <div style={{ display: 'flex', justifyContent: 'center', gap: 16 }}>
-              {[['OVR','overall','#f0c040'],['ATK','attack','#ef4444'],['DEF','defense','#3b82f6'],['SPD','speed','#22c55e']].map(([l,k,c]) => (
-                <div key={l} style={{ textAlign: 'center' }}>
-                  <div style={{ fontSize: 20, fontWeight: 800, color: c }}>{card[k]}</div>
-                  <div style={{ fontSize: 10, color: 'var(--muted)' }}>{l}</div>
-                </div>
-              ))}
-            </div>
+        {/* SHAKE PHASE — pack image */}
+        {phase === 'shake' && (
+          <div style={{ width: 200, animation: 'packShake 0.9s ease forwards' }}>
+            {packImg
+              ? <img src={packImg} style={{ width: '100%', height: 'auto', display: 'block' }} />
+              : <div style={{ fontSize: 80, textAlign: 'center' }}>📦</div>
+            }
           </div>
         )}
 
-        {flipped && (
-          <button className="btn-primary anim-fadeUp" onClick={nextCard} style={{ maxWidth: 280 }}>
-            {revealIndex < revealedCards.length - 1 ? 'Next Card →' : 'See All'}
-          </button>
+        {/* REVEAL PHASE — card with flip + glow + shine */}
+        {(phase === 'reveal' || phase === 'flash') && (
+          <>
+            <div style={{ width: 220, perspective: 900, animation: phase === 'reveal' ? 'cardEntrance 0.4s ease both' : 'none' }}>
+              <div style={{
+                width: '100%', transformStyle: 'preserve-3d', position: 'relative',
+                transition: 'transform 0.55s cubic-bezier(0.4,0,0.2,1)',
+                transform: flipped ? 'rotateY(0deg)' : 'rotateY(180deg)',
+                borderRadius: 10,
+                animation: !flipped && phase === 'reveal' ? 'backPulse 0.8s ease infinite' : 'none',
+              }}>
+                {/* Card front */}
+                <div style={{ backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden', borderRadius: 10, overflow: 'hidden', position: 'relative', filter: flipped ? dropShadow : 'none', transition: 'filter 0.4s ease' }}>
+                  <FutCard card={card} />
+                  {/* Shine sweep */}
+                  {shineActive && (
+                    <div style={{
+                      position: 'absolute', top: 0, bottom: 0, width: '45%',
+                      background: 'linear-gradient(to right, transparent, rgba(255,255,255,0.55), transparent)',
+                      transform: 'skewX(-12deg)', animation: 'shineSweep 0.65s ease forwards',
+                      pointerEvents: 'none',
+                    }} />
+                  )}
+                </div>
+                {/* Card back */}
+                <div style={{
+                  position: 'absolute', inset: 0, backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden',
+                  transform: 'rotateY(180deg)', background: 'linear-gradient(135deg,#1e3a5f,#0f1f3d)',
+                  borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}>
+                  <span style={{ fontSize: 40 }}>⚽</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Card info */}
+            {flipped && (
+              <div className="anim-fadeUp" style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: 20, fontWeight: 700, color: '#fff' }}>{card.name}</div>
+                <div style={{ fontSize: 13, margin: '4px 0 12px', color: { Common:'#94a3b8', Uncommon:'#22c55e', Rare:'#f0c040' }[card.card_rarity] || '#fff', fontWeight: 600 }}>
+                  {card.card_rarity} · {card.card_type}
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'center', gap: 20 }}>
+                  {[['OVR','overall','#f0c040'],['ATK','attack','#ef4444'],['DEF','defense','#3b82f6'],['SPD','speed','#22c55e']].map(([l,k,c]) => (
+                    <div key={l} style={{ textAlign: 'center' }}>
+                      <div style={{ fontSize: 22, fontWeight: 900, color: c }}>{card[k]}</div>
+                      <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)' }}>{l}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {flipped && (
+              <button className="btn-primary anim-fadeUp" onClick={nextCard} style={{ maxWidth: 260 }}>
+                {revealIndex < revealedCards.length - 1 ? 'Next Card →' : 'See All'}
+              </button>
+            )}
+          </>
         )}
       </div>
     )
@@ -115,17 +219,11 @@ export default function Packs({ token }) {
 
   /* ── RESULT ── */
   if (screen === 'result') return (
-    <div className="page">
-      <h2 style={{ color: '#fff', fontWeight: 700, marginBottom: 14 }}>Cards Received</h2>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginBottom: 16 }}>
-        {revealedCards.map((card, i) => (
-          <div key={i} className="anim-fadeUp" style={{ width: 125, flexShrink: 0, animationDelay: `${i * 0.07}s` }}>
-            <FutCard card={card} />
-          </div>
-        ))}
-      </div>
-      <button className="btn-primary" onClick={() => setScreen('list')}>Back to Packs</button>
-    </div>
+    <ResultScreen
+      cards={revealedCards}
+      token={token}
+      onBack={() => setScreen('list')}
+    />
   )
 
   /* ── PACK LIST ── */
@@ -180,6 +278,65 @@ export default function Packs({ token }) {
             </div>
           )
         })()}
+    </div>
+  )
+}
+
+function ResultScreen({ cards, token, onBack }) {
+  const [sold, setSold]         = useState({})
+  const [confirming, setConfirming] = useState(null) // card_id being confirmed
+  const [toast, setToast]       = useState(null)
+
+  async function sellCard(card) {
+    setConfirming(null)
+    try {
+      const res = await apiFetch(`/api/shop/sell/${card.card_id}`, token, { method: 'POST' })
+      setSold(s => ({ ...s, [card.card_id]: res.coins_earned }))
+      setToast(`Sold ${card.name} for 🪙 ${res.coins_earned}`)
+      setTimeout(() => setToast(null), 2500)
+    } catch (e) {
+      setToast('Could not sell card')
+      setTimeout(() => setToast(null), 2000)
+    }
+  }
+
+  return (
+    <div className="page">
+      {toast && (
+        <div style={{ position: 'fixed', top: 16, left: '50%', transform: 'translateX(-50%)', background: '#22c55e', color: '#fff', borderRadius: 10, padding: '10px 20px', fontSize: 14, fontWeight: 600, zIndex: 300, whiteSpace: 'nowrap' }} className="anim-fadeUp">
+          {toast}
+        </div>
+      )}
+      <h2 style={{ color: '#fff', fontWeight: 700, marginBottom: 16 }}>Cards Received</h2>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 14, marginBottom: 16 }}>
+        {cards.map((card, i) => {
+          const isSold = !!sold[card.card_id]
+          const sellValue = calcValue(card)
+          return (
+            <div key={i} className="anim-fadeUp" style={{ animationDelay: `${i * 0.06}s`, opacity: isSold ? 0.4 : 1, transition: 'opacity 0.3s' }}>
+              <FutCard card={card} />
+              <div style={{ marginTop: 6, textAlign: 'center' }}>
+                {isSold ? (
+                  <div style={{ fontSize: 12, color: '#22c55e', fontWeight: 600 }}>✓ Sold for 🪙{sold[card.card_id]}</div>
+                ) : confirming === card.card_id ? (
+                  <div style={{ display: 'flex', gap: 4 }}>
+                    <button onClick={() => sellCard(card)} style={{ flex: 1, background: '#ef4444', border: 'none', borderRadius: 7, color: '#fff', padding: '5px 0', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>Confirm</button>
+                    <button onClick={() => setConfirming(null)} style={{ flex: 1, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 7, color: '#aaa', padding: '5px 0', fontSize: 11, cursor: 'pointer' }}>Cancel</button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setConfirming(card.card_id)}
+                    style={{ background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 8, color: '#f87171', padding: '5px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer', width: '100%' }}
+                  >
+                    Sell 🪙{sellValue}
+                  </button>
+                )}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+      <button className="btn-primary" onClick={onBack}>Back to Packs</button>
     </div>
   )
 }
