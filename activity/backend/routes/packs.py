@@ -135,6 +135,11 @@ async def claim_starter_pack(discord_user=Depends(get_current_user)):
     if player["has_claimed_starter_pack"]:
         raise HTTPException(status_code=400, detail="Already claimed")
 
+    owned_before = {
+        row["card_id"] for row in
+        db.execute("SELECT card_id FROM inventories WHERE user_id = ?", (user_id,)).fetchall()
+    }
+
     all_cards = db.execute("SELECT * FROM cards").fetchall()
     commons   = [c for c in all_cards if 70 <= c["overall"] <= 79 and c["card_type"] not in NON_DROPPABLE_TYPES]
     uncommons = [c for c in all_cards if 80 <= c["overall"] <= 85 and c["card_type"] not in NON_DROPPABLE_TYPES]
@@ -151,6 +156,7 @@ async def claim_starter_pack(discord_user=Depends(get_current_user)):
         edition = add_to_inventory(db, user_id, card["card_id"])
         cd = card_to_dict(card)
         cd["edition"] = edition
+        cd["already_owned"] = card["card_id"] in owned_before
         result.append(cd)
 
     db.execute("UPDATE players SET has_claimed_starter_pack = 1 WHERE user_id = ?", (user_id,))
@@ -171,6 +177,11 @@ async def open_pack(pack_type: str, discord_user=Depends(get_current_user)):
     if not row or dict(row).get(pack_type, 0) <= 0:
         raise HTTPException(status_code=400, detail="You don't own this pack")
 
+    owned_before = {
+        r["card_id"] for r in
+        db.execute("SELECT card_id FROM inventories WHERE user_id = ?", (user_id,)).fetchall()
+    }
+
     cards = PACK_OPENERS[pack_type](db, user_id)
 
     result = []
@@ -178,6 +189,7 @@ async def open_pack(pack_type: str, discord_user=Depends(get_current_user)):
         edition = add_to_inventory(db, user_id, card["card_id"])
         cd = card_to_dict(card)
         cd["edition"] = edition
+        cd["already_owned"] = card["card_id"] in owned_before
         result.append(cd)
 
     db.execute(f"UPDATE packs SET {pack_type} = {pack_type} - 1 WHERE user_id = ?", (user_id,))

@@ -352,7 +352,10 @@ export default function Packs({ token, starterCards = null, onStarterDone = null
                       WebkitBackfaceVisibility: 'hidden',
                       filter: isTopCard ? `drop-shadow(0 0 10px ${rarityColor}99) drop-shadow(0 4px 20px ${rarityColor}55)` : 'none',
                     }}>
-                      <FutCard card={c} />
+                      <div style={{ position: 'relative' }}>
+                        <FutCard card={c} />
+                        {isTopCard && c.already_owned && <AlreadyOwnedBadge />}
+                      </div>
                     </div>
                   )
                 })
@@ -603,6 +606,7 @@ export default function Packs({ token, starterCards = null, onStarterDone = null
                       {isLast && (
                         <div style={{ position: 'absolute', top: 0, bottom: 0, width: '45%', background: 'linear-gradient(to right, transparent, rgba(255,255,255,0.55), transparent)', transform: 'skewX(-12deg)', animation: 'shineSweep 0.65s ease forwards', pointerEvents: 'none' }} />
                       )}
+                      {isFlipped && card.already_owned && <AlreadyOwnedBadge />}
                     </div>
                     {/* Card back */}
                     <div style={{ position: 'absolute', inset: 0, backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden', transform: 'rotateY(180deg)', background: 'linear-gradient(135deg,#1e3a5f,#0f1f3d)', borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -1054,6 +1058,7 @@ function QuickRevealInner({ card, packImg, packLabel, onDone, openingPack, onSta
               <div style={{backfaceVisibility:'hidden',WebkitBackfaceVisibility:'hidden',borderRadius:10,overflow:'hidden',position:'relative',animation:glowAnim}}>
                 <FutCard card={card}/>
                 {shineActive && <div style={{position:'absolute',top:0,bottom:0,width:'45%',background:'linear-gradient(to right,transparent,rgba(255,255,255,0.55),transparent)',transform:'skewX(-12deg)',animation:'shineSweep2 0.65s ease forwards',pointerEvents:'none'}}/>}
+                {flipped && card.already_owned && <AlreadyOwnedBadge />}
               </div>
               <div style={{position:'absolute',inset:0,backfaceVisibility:'hidden',WebkitBackfaceVisibility:'hidden',transform:'rotateY(180deg)',background:'linear-gradient(135deg,#1e3a5f,#0f1f3d)',borderRadius:10,display:'flex',alignItems:'center',justifyContent:'center'}}><span style={{fontSize:40}}>⚽</span></div>
             </div>
@@ -1079,6 +1084,27 @@ function QuickRevealInner({ card, packImg, packLabel, onDone, openingPack, onSta
 // ── Layered Final Reveal: once last card is tapped, play full EA FC animation ──
 function LayeredFinalReveal({ card, onDone, packLabel, openingPack, onStarterDone, tutorialStep, onTutorialAdvance, revealedCards }) {
   return <QuickRevealInner card={card} packImg={null} packLabel={packLabel} onDone={onDone} openingPack={openingPack} onStarterDone={onStarterDone} tutorialStep={tutorialStep} onTutorialAdvance={onTutorialAdvance} />
+}
+
+function AlreadyOwnedBadge() {
+  return (
+    <div style={{
+      position: 'absolute', bottom: 0, left: 0, right: 0,
+      background: 'rgba(0,0,0,0.72)',
+      backdropFilter: 'blur(2px)',
+      color: '#94a3b8',
+      fontSize: 9,
+      fontWeight: 700,
+      textAlign: 'center',
+      padding: '5px 0 4px',
+      letterSpacing: 1.5,
+      textTransform: 'uppercase',
+      borderRadius: '0 0 10px 10px',
+      pointerEvents: 'none',
+    }}>
+      Already Owned
+    </div>
+  )
 }
 
 function ResultScreen({ cards, token, onBack, backLabel = 'Back to Packs', isStarter = false, tutorialStep = 0 }) {
@@ -1113,7 +1139,10 @@ function ResultScreen({ cards, token, onBack, backLabel = 'Back to Packs', isSta
           const sellValue = calcValue(card)
           return (
             <div key={i} className="anim-fadeUp" style={{ animationDelay: `${i * 0.06}s`, opacity: isSold ? 0.4 : 1, transition: 'opacity 0.3s' }}>
-              <FutCard card={card} />
+              <div style={{ position: 'relative' }}>
+                <FutCard card={card} />
+                {card.already_owned && <AlreadyOwnedBadge />}
+              </div>
               {!isStarter && (
                 <div style={{ marginTop: 6, textAlign: 'center' }}>
                   {isSold ? (
