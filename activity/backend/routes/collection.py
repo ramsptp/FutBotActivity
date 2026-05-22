@@ -23,7 +23,19 @@ async def get_collection(
     query = """
         SELECT c.card_id, c.name, c.attack, c.defense, c.speed, c.overall,
                c.club, c.position, c.card_rarity, c.card_type, c.league,
-               c.nation, c.image_path, i.edition
+               c.nation, c.image_path,
+               (SELECT COUNT(*) FROM inventories WHERE card_id = c.card_id) AS copies,
+               COALESCE(c.wishlist_count, 0)        AS wishlist_count,
+               COALESCE(c.total_battles_played, 0)  AS total_battles_played,
+               COALESCE(c.total_battles_won, 0)     AS total_battles_won,
+               COALESCE(c.total_rounds_played, 0)   AS total_rounds_played,
+               COALESCE(c.total_rounds_won, 0)      AS total_rounds_won,
+               i.edition,
+               COALESCE(i.trade_count, 0)           AS trade_count,
+               COALESCE(i.battles_played, 0)        AS copy_battles_played,
+               COALESCE(i.battles_won, 0)           AS copy_battles_won,
+               COALESCE(i.rounds_played, 0)         AS copy_rounds_played,
+               COALESCE(i.rounds_won, 0)            AS copy_rounds_won
         FROM inventories i
         JOIN cards c ON i.card_id = c.card_id
         WHERE i.user_id = ?

@@ -51,6 +51,32 @@ if fantasy_dir:
     if os.path.isdir(fantasy_dir):
         app.mount("/fantasy-images", StaticFiles(directory=fantasy_dir), name="fantasy-images")
 
+def _run_migrations():
+    db = get_db()
+    migrations = [
+        ("players", "daily_streak",        "INTEGER DEFAULT 0"),
+        ("players", "last_daily_claim",    "TEXT"),
+        ("players", "daily_pending_card1", "INTEGER"),
+        ("players", "daily_pending_card2", "INTEGER"),
+        ("inventories", "battles_played",  "INTEGER DEFAULT 0"),
+        ("inventories", "battles_won",     "INTEGER DEFAULT 0"),
+        ("inventories", "rounds_played",   "INTEGER DEFAULT 0"),
+        ("inventories", "rounds_won",      "INTEGER DEFAULT 0"),
+        ("cards",   "wishlist_count",      "INTEGER DEFAULT 0"),
+        ("cards",   "total_battles_played","INTEGER DEFAULT 0"),
+        ("cards",   "total_battles_won",   "INTEGER DEFAULT 0"),
+        ("cards",   "total_rounds_played", "INTEGER DEFAULT 0"),
+        ("cards",   "total_rounds_won",    "INTEGER DEFAULT 0"),
+    ]
+    for table, col, typedef in migrations:
+        try:
+            db.execute(f"ALTER TABLE {table} ADD COLUMN {col} {typedef}")
+        except Exception:
+            pass
+    db.commit()
+
+_run_migrations()
+
 app.include_router(auth_router, prefix="/api")
 app.include_router(collection_router, prefix="/api")
 app.include_router(decks_router, prefix="/api")
