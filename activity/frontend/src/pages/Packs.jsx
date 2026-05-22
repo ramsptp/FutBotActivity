@@ -992,7 +992,7 @@ export default function Packs({ token, starterCards = null, onStarterDone = null
 }
 
 // ── Quick Reveal: runs the full single-card EA FC animation for the featured card, then calls onDone ──
-function QuickRevealInner({ card, packImg, packLabel, onDone, openingPack, onStarterDone, tutorialStep, onTutorialAdvance }) {
+export function QuickRevealInner({ card, packImg, packLabel, onDone, openingPack, onStarterDone, tutorialStep, onTutorialAdvance }) {
   const [phase, setPhase]         = useState('shake')
   const [flipped, setFlipped]     = useState(false)
   const [shineActive, setShineActive] = useState(false)
@@ -1115,7 +1115,7 @@ function ResultScreen({ cards, token, onBack, backLabel = 'Back to Packs', isSta
   async function sellCard(card) {
     setConfirming(null)
     try {
-      const res = await apiFetch(`/api/shop/sell/${card.card_id}/${card.edition}`, token, { method: 'POST' })
+      const res = await apiFetch(`/api/shop/sell/${card.card_id}${card.edition != null ? `?edition=${card.edition}` : ''}`, token, { method: 'POST' })
       setSold(s => ({ ...s, [card.card_id]: res.coins_earned }))
       setToast(`Sold ${card.name} for 🪙 ${res.coins_earned}`)
       setTimeout(() => setToast(null), 2500)
