@@ -379,28 +379,37 @@ function TradeUpTab({ token, showToast }) {
   if (result) {
     const rarityColor = { Common: '#94a3b8', Uncommon: '#22c55e', Rare: '#f0c040' }[result.card_rarity] || '#fff'
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16, paddingTop: 12 }}>
-        <div style={{ fontSize: 11, fontWeight: 700, color: '#22c55e', letterSpacing: 3, textTransform: 'uppercase' }}>✨ Trade Up Complete!</div>
-        <div style={{ width: 200 }} className="anim-fadeUp">
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, paddingTop: 8 }}>
+        <div style={{ fontSize: 10, fontWeight: 700, color: '#22c55e', letterSpacing: 3, textTransform: 'uppercase' }}>✨ Trade Up Complete!</div>
+        <div style={{ width: 200, position: 'relative' }} className="anim-fadeUp">
           <FutCard card={result} />
+          {result.already_owned && (
+            <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, background: 'rgba(0,0,0,0.72)', backdropFilter: 'blur(2px)', color: '#94a3b8', fontSize: 9, fontWeight: 700, textAlign: 'center', padding: '4px 0 3px', letterSpacing: 1.5, textTransform: 'uppercase', borderRadius: '0 0 10px 10px', pointerEvents: 'none' }}>
+              Already Owned
+            </div>
+          )}
         </div>
         <div style={{ textAlign: 'center' }}>
-          <div style={{ fontSize: 18, fontWeight: 800, color: '#fff', marginBottom: 3 }}>{result.name}</div>
-          <div style={{ fontSize: 13, color: rarityColor, fontWeight: 600, marginBottom: 6 }}>{result.card_rarity} · {result.card_type}</div>
-          <div style={{ fontSize: 12, color: 'var(--muted)' }}>Edition #{result.edition} · {result.overall} OVR</div>
+          <div style={{ fontSize: 16, fontWeight: 800, color: '#fff', marginBottom: 1 }}>{result.name}</div>
+          <div style={{ fontSize: 12, color: rarityColor, fontWeight: 600, marginBottom: 2 }}>{result.card_rarity} · {result.card_type}</div>
+          <div style={{ fontSize: 10, color: 'var(--muted)' }}>Edition #{(result.edition ?? 0) + 1}</div>
         </div>
-        <div style={{ display: 'flex', gap: 24 }}>
-          {[['ATK', result.attack, '#ef4444'], ['DEF', result.defense, '#3b82f6'], ['SPD', result.speed, '#22c55e']].map(([l, v, c]) => (
+        {/* OVR big + PAC ATT DEF in one compact row */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: 44, fontWeight: 900, color: '#f0c040', lineHeight: 1, filter: 'drop-shadow(0 0 12px rgba(240,192,64,0.55))' }}>{result.overall}</div>
+            <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.35)', letterSpacing: 3 }}>OVR</div>
+          </div>
+          <div style={{ width: 1, height: 40, background: 'rgba(255,255,255,0.1)' }} />
+          {[['PAC', result.speed, '#22c55e'], ['ATT', result.attack, '#ef4444'], ['DEF', result.defense, '#3b82f6']].map(([l, v, c]) => (
             <div key={l} style={{ textAlign: 'center' }}>
               <div style={{ fontSize: 22, fontWeight: 900, color: c }}>{v}</div>
-              <div style={{ fontSize: 10, color: 'var(--muted)' }}>{l}</div>
+              <div style={{ fontSize: 9, color: 'var(--muted)' }}>{l}</div>
             </div>
           ))}
         </div>
-        <div style={{ display: 'flex', gap: 10, width: '100%', marginTop: 8 }}>
-          <button onClick={() => pickTier(tier)} className="btn-primary" style={{ flex: 1 }}>
-            Trade Again
-          </button>
+        <div style={{ display: 'flex', gap: 10, width: '100%', marginTop: 4 }}>
+          <button onClick={() => pickTier(tier)} className="btn-primary" style={{ flex: 1 }}>Trade Again</button>
           <button onClick={() => { setResult(null); setTier(null) }}
             style={{ flex: 1, background: 'rgba(255,255,255,0.06)', border: '1px solid var(--border)', borderRadius: 10, color: 'var(--muted)', padding: '12px', cursor: 'pointer', fontSize: 14 }}>
             Done

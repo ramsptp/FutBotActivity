@@ -11,6 +11,7 @@ from routes.battles import router as battles_router
 from routes.packs import router as packs_router
 from routes.shop import router as shop_router
 from routes.profile import router as profile_router
+from routes.market import router as market_router
 from db import get_db
 
 app = FastAPI()
@@ -53,6 +54,22 @@ if fantasy_dir:
 
 def _run_migrations():
     db = get_db()
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS market_listings (
+            listing_id  INTEGER PRIMARY KEY AUTOINCREMENT,
+            seller_id   INTEGER,
+            card_id     INTEGER,
+            edition     INTEGER DEFAULT 1,
+            trade_count INTEGER DEFAULT 0,
+            price       INTEGER,
+            listed_at   TEXT DEFAULT CURRENT_TIMESTAMP,
+            expires_at  TEXT,
+            status      TEXT DEFAULT 'active',
+            resolved_at TEXT,
+            buyer_id    INTEGER
+        )
+    """)
+    db.commit()
     migrations = [
         ("players", "daily_streak",        "INTEGER DEFAULT 0"),
         ("players", "last_daily_claim",    "TEXT"),
@@ -84,6 +101,7 @@ app.include_router(battles_router)
 app.include_router(packs_router, prefix="/api")
 app.include_router(shop_router, prefix="/api")
 app.include_router(profile_router, prefix="/api")
+app.include_router(market_router,  prefix="/api")
 
 @app.get("/api/health")
 def health():

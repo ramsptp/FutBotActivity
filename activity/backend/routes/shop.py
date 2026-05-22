@@ -438,16 +438,20 @@ async def execute_tradeup(body: TradeUpBody, discord_user=Depends(get_current_us
     if not result_row:
         raise HTTPException(status_code=500, detail="No eligible reward cards found")
 
+    result_card_id = result_row["card_id"]
+    already_owned = db.execute(
+        "SELECT 1 FROM inventories WHERE user_id=? AND card_id=?", (user_id, result_card_id)
+    ).fetchone() is not None
+
     # Delete sacrificed cards by rowid (exact copy behaviour from bot.py)
     for s in body.selections:
         db.execute("DELETE FROM inventories WHERE rowid=?", (s.inv_id,))
 
     # Award result card (same logic as add_to_inventory)
-    result_card_id = result_row["card_id"]
     current_copies = db.execute("SELECT copies FROM cards WHERE card_id=?", (result_card_id,)).fetchone()[0] or 0
     db.execute("INSERT INTO inventories (user_id, card_id, edition) VALUES (?,?,?)", (user_id, result_card_id, current_copies))
     db.execute("UPDATE cards SET copies = copies + 1 WHERE card_id=?", (result_card_id,))
     db.commit()
 
-    cd = {**dict(result_row), "image_url": _img(result_row["image_path"]), "edition": current_copies}
+    cd = {**dict(result_row), "image_url": _img(result_row["image_path"]), "edition": current_copies, "already_owned": already_owned}
     return {"card": cd}

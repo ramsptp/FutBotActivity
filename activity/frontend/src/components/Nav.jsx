@@ -7,6 +7,7 @@ const TABS = [
   { id: 'home',       icon: 'home',          label: 'Home' },
   { id: 'collection', icon: 'style',          label: 'Collection' },
   { id: 'shop',       icon: 'shopping_cart',  label: 'Shop' },
+  { id: 'market',     icon: 'storefront',     label: 'Market' },
   { id: 'packs',      icon: 'inventory_2',    label: 'Packs' },
   { id: 'decks',      icon: 'layers',         label: 'Decks' },
   { id: 'battle',     icon: 'swords',         label: 'Battle' },

@@ -8,6 +8,7 @@ import DeckBuilder from './pages/DeckBuilder'
 import Battle from './pages/Battle'
 import Packs from './pages/Packs'
 import Shop from './pages/Shop'
+import Market from './pages/Market'
 import LoadingScreen from './components/LoadingScreen'
 import ChallengeNotification from './components/ChallengeNotification'
 import TutorialOverlay from './components/TutorialOverlay'
@@ -106,7 +107,8 @@ function App() {
       {page === 'collection' && <Collection token={token} />}
       {page === 'decks' && <DeckBuilder token={token} tutorialStep={tutorialStep} onTutorialAdvance={advanceTutorial} />}
       {page === 'packs' && <Packs token={token} starterCards={starterCards} onStarterDone={() => { setStarterCards(null); setPage('decks') }} tutorialStep={tutorialStep} onTutorialAdvance={advanceTutorial} />}
-      {page === 'shop' && <Shop token={token} />}
+      {page === 'shop'   && <Shop token={token} />}
+      {page === 'market' && <Market token={token} />}
       {page === 'battle' && (
         <Battle
           token={token}
