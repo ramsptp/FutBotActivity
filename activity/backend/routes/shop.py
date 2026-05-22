@@ -222,13 +222,12 @@ async def pick_daily_card(card_id: int, discord_user=Depends(get_current_user)):
     if card_id not in {player["daily_pending_card1"], player["daily_pending_card2"]}:
         raise HTTPException(status_code=400, detail="Invalid card selection")
 
-    last_ed = db.execute("SELECT MAX(edition) FROM inventories WHERE card_id=?", (card_id,)).fetchone()[0] or 0
-    already = db.execute("SELECT 1 FROM inventories WHERE user_id=? AND card_id=?", (user_id, card_id)).fetchone()
-    if not already:
-        db.execute(
-            "INSERT INTO inventories (user_id, card_id, edition, battles_played, battles_won, rounds_played, rounds_won, trade_count) VALUES (?,?,?,0,0,0,0,0)",
-            (user_id, card_id, last_ed + 1)
-        )
+    current_copies = db.execute("SELECT copies FROM cards WHERE card_id=?", (card_id,)).fetchone()[0] or 0
+    db.execute(
+        "INSERT INTO inventories (user_id, card_id, edition, battles_played, battles_won, rounds_played, rounds_won, trade_count) VALUES (?,?,?,0,0,0,0,0)",
+        (user_id, card_id, current_copies)
+    )
+    db.execute("UPDATE cards SET copies = copies + 1 WHERE card_id=?", (card_id,))
     db.execute("UPDATE players SET daily_pending_card1=NULL, daily_pending_card2=NULL WHERE user_id=?", (user_id,))
     db.commit()
 
@@ -273,18 +272,20 @@ async def get_sell_value(card_id: int, discord_user=Depends(get_current_user)):
     return {"value": calculate_card_value(dict(card))}
 
 
-@router.post("/shop/sell/{card_id}")
-async def sell_card(card_id: int, discord_user=Depends(get_current_user)):
+@router.post("/shop/sell/{card_id}/{edition}")
+async def sell_card(card_id: int, edition: int, discord_user=Depends(get_current_user)):
     user_id = int(discord_user["id"])
     db = get_db()
-    owned = db.execute("SELECT 1 FROM inventories WHERE user_id = ? AND card_id = ?", (user_id, card_id)).fetchone()
+    owned = db.execute(
+        "SELECT 1 FROM inventories WHERE user_id = ? AND card_id = ? AND edition = ?", (user_id, card_id, edition)
+    ).fetchone()
     if not owned:
-        raise HTTPException(status_code=400, detail="Card not in inventory")
+        raise HTTPException(status_code=400, detail="Card copy not in inventory")
     card = db.execute("SELECT * FROM cards WHERE card_id = ?", (card_id,)).fetchone()
     if not card:
         raise HTTPException(status_code=404, detail="Card not found")
     value = calculate_card_value(dict(card))
-    db.execute("DELETE FROM inventories WHERE user_id = ? AND card_id = ?", (user_id, card_id))
+    db.execute("DELETE FROM inventories WHERE user_id = ? AND card_id = ? AND edition = ?", (user_id, card_id, edition))
     db.execute("UPDATE players SET coins = coins + ?, cards_sold = cards_sold + 1 WHERE user_id = ?", (value, user_id))
     db.commit()
     new_balance = db.execute("SELECT coins FROM players WHERE user_id = ?", (user_id,)).fetchone()["coins"]

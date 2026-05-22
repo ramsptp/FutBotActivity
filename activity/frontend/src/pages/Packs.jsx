@@ -1089,7 +1089,7 @@ function ResultScreen({ cards, token, onBack, backLabel = 'Back to Packs', isSta
   async function sellCard(card) {
     setConfirming(null)
     try {
-      const res = await apiFetch(`/api/shop/sell/${card.card_id}`, token, { method: 'POST' })
+      const res = await apiFetch(`/api/shop/sell/${card.card_id}/${card.edition}`, token, { method: 'POST' })
       setSold(s => ({ ...s, [card.card_id]: res.coins_earned }))
       setToast(`Sold ${card.name} for 🪙 ${res.coins_earned}`)
       setTimeout(() => setToast(null), 2500)

@@ -47,7 +47,7 @@ export default function Shop({ token }) {
 
   async function sellCard(card) {
     try {
-      const res = await apiFetch(`/api/shop/sell/${card.card_id}`, token, { method: 'POST' })
+      const res = await apiFetch(`/api/shop/sell/${card.card_id}/${card.edition}`, token, { method: 'POST' })
       setCoins(res.coins)
       setCollection(c => c.filter(x => x.card_id !== card.card_id))
       showToast(`Sold ${card.name} for ${res.coins_earned.toLocaleString()} coins`)
