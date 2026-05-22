@@ -12,6 +12,7 @@ from routes.packs import router as packs_router
 from routes.shop import router as shop_router
 from routes.profile import router as profile_router
 from routes.market import router as market_router
+from routes.trades import router as trades_router
 from db import get_db
 
 app = FastAPI()
@@ -102,6 +103,7 @@ app.include_router(packs_router, prefix="/api")
 app.include_router(shop_router, prefix="/api")
 app.include_router(profile_router, prefix="/api")
 app.include_router(market_router,  prefix="/api")
+app.include_router(trades_router)
 
 @app.get("/api/health")
 def health():

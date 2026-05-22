@@ -79,7 +79,7 @@ export default function Shop({ token }) {
 
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <h2 style={{ color: '#fff', fontWeight: 700, fontSize: 20 }}>🛒 Shop</h2>
+          <h2 style={{ color: '#fff', fontWeight: 700, fontSize: 20 }}>Shop</h2>
           <PageHelp page="shop" />
         </div>
         <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 20, padding: '6px 14px', fontSize: 14, fontWeight: 700, color: 'var(--gold)' }}>
@@ -311,11 +311,10 @@ const TIER_META = {
 }
 
 const ODDS_ROWS = [
-  ['Rare Standard 80–85 OVR', '55%', '#94a3b8'],
-  ['Rare Standard 86–89 OVR', '15%', '#94a3b8'],
-  ['Rare Standard 90+ OVR',   '10%', '#f0c040'],
-  ['Hero (any OVR)',           '10%', '#a78bfa'],
-  ['Icon (any OVR)',            '6%', '#fbbf24'],
+  ['Rare Standard 86–89 OVR', '~67%', '#94a3b8'],
+  ['Rare Standard 90+ OVR',   '~24%', '#f0c040'],
+  ['Hero (any OVR)',            '~6%', '#a78bfa'],
+  ['Icon (any OVR)',            '~2%', '#fbbf24'],
 ]
 
 function TradeUpTab({ token, showToast }) {

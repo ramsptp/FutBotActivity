@@ -25,7 +25,7 @@ const EMBERS = [
   { left: '92%', size: 5,  delay: '5s',  dur: '7s' },
 ]
 
-export default function Home({ token, user, setPage, participants = [], setBattleMode, onStarterClaim, tutorialStep = 0, onTutorialAdvance, onTutorialSkip, setAutoChallenge }) {
+export default function Home({ token, user, setPage, participants = [], setBattleMode, onStarterClaim, tutorialStep = 0, onTutorialAdvance, onTutorialSkip, setAutoChallenge, onTrade }) {
   const [player, setPlayer]             = useState(null)
   const [packs, setPacks]               = useState(null)
   const [showOnlinePanel, setShowOnlinePanel] = useState(false)
@@ -58,6 +58,7 @@ export default function Home({ token, user, setPage, participants = [], setBattl
           token={token}
           viewUser={viewingProfile}
           onClose={() => setViewingProfile(null)}
+          onTrade={onTrade}
         />
       )}
 

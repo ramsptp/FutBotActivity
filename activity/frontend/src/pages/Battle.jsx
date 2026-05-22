@@ -273,6 +273,20 @@ export default function Battle({ token, participants = [], incomingChallenge, se
             }
           `}</style>
 
+          {/* Forfeit button */}
+          <div style={{ position: 'absolute', top: 14, right: 14 }}>
+            {!surrenderConfirm ? (
+              <button onClick={() => setSurrenderConfirm(true)} style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.25)', borderRadius: 8, color: '#ef4444', padding: '5px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                Forfeit
+              </button>
+            ) : (
+              <div style={{ display: 'flex', gap: 6 }}>
+                <button onClick={surrender} style={{ background: '#ef4444', border: 'none', borderRadius: 8, color: '#fff', padding: '5px 12px', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>Confirm</button>
+                <button onClick={() => setSurrenderConfirm(false)} style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, color: '#aaa', padding: '5px 10px', fontSize: 12, cursor: 'pointer' }}>Cancel</button>
+              </div>
+            )}
+          </div>
+
           {/* Header */}
           <div style={{ textAlign: 'center' }}>
             <div style={{ fontSize: 11, color: '#a855f7', fontWeight: 700, letterSpacing: 3, textTransform: 'uppercase' }}>Fantasy Draft</div>

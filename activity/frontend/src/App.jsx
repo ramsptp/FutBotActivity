@@ -9,6 +9,7 @@ import Battle from './pages/Battle'
 import Packs from './pages/Packs'
 import Shop from './pages/Shop'
 import Market from './pages/Market'
+import TradeScreen from './pages/TradeScreen'
 import LoadingScreen from './components/LoadingScreen'
 import ChallengeNotification from './components/ChallengeNotification'
 import TutorialOverlay from './components/TutorialOverlay'
@@ -23,6 +24,8 @@ function App() {
   const [autoChallenge, setAutoChallenge] = useState(null) // participant to auto-challenge
   const [participants, setParticipants] = useState([])
   const [incomingChallenge, setIncomingChallenge] = useState(null)
+  const [incomingTrade, setIncomingTrade]         = useState(null)
+  const [tradeRoomId, setTradeRoomId]             = useState(null)
   const authing = useRef(false)
   const pollRef = useRef(null)
 
@@ -76,6 +79,8 @@ function App() {
       setParticipants(parts || [])
       const challenge = await apiFetch('/api/challenges/incoming', token).catch(() => null)
       setIncomingChallenge(prev => challenge || prev)
+      const trade = await apiFetch('/api/trades/incoming', token).catch(() => null)
+      setIncomingTrade(prev => trade || prev)
     }
 
     register()
@@ -103,12 +108,18 @@ function App() {
       minHeight: '100svh',
       background: "url('/background.png') center center / cover no-repeat fixed",
     } : undefined}>
-      {page === 'home' && <Home token={token} user={user} setPage={setPage} participants={participants} setBattleMode={setBattleMode} onStarterClaim={cards => { setStarterCards(cards); setTutorialStep(1); setPage('packs') }} tutorialStep={tutorialStep} onTutorialAdvance={advanceTutorial} onTutorialSkip={skipTutorial} setAutoChallenge={setAutoChallenge} />}
+      {page === 'home' && <Home token={token} user={user} setPage={setPage} participants={participants} setBattleMode={setBattleMode} onStarterClaim={cards => { setStarterCards(cards); setTutorialStep(1); setPage('packs') }} tutorialStep={tutorialStep} onTutorialAdvance={advanceTutorial} onTutorialSkip={skipTutorial} setAutoChallenge={setAutoChallenge}
+        onTrade={async (toUserId) => {
+          const res = await apiFetch('/api/trades/invite', token, { method: 'POST', body: JSON.stringify({ to_user_id: toUserId }) })
+          if (res?.room_id) setTradeRoomId(res.room_id)
+        }}
+      />}
       {page === 'collection' && <Collection token={token} />}
       {page === 'decks' && <DeckBuilder token={token} tutorialStep={tutorialStep} onTutorialAdvance={advanceTutorial} />}
       {page === 'packs' && <Packs token={token} starterCards={starterCards} onStarterDone={() => { setStarterCards(null); setPage('decks') }} tutorialStep={tutorialStep} onTutorialAdvance={advanceTutorial} />}
       {page === 'shop'   && <Shop token={token} />}
       {page === 'market' && <Market token={token} />}
+      {tradeRoomId && <TradeScreen token={token} roomId={tradeRoomId} myUserId={user?.id ? parseInt(user.id) : null} myUsername={user?.username} onClose={() => setTradeRoomId(null)} />}
       {page === 'battle' && (
         <Battle
           token={token}
@@ -120,7 +131,12 @@ function App() {
           setAutoChallenge={setAutoChallenge}
         />
       )}
-      {page !== 'home' && <Nav page={page} setPage={setPage} participants={participants} user={user} token={token} setBattleMode={setBattleMode} setAutoChallenge={setAutoChallenge} />}
+      {page !== 'home' && <Nav page={page} setPage={setPage} participants={participants} user={user} token={token} setBattleMode={setBattleMode} setAutoChallenge={setAutoChallenge}
+        onTrade={async (toUserId) => {
+          const res = await apiFetch('/api/trades/invite', token, { method: 'POST', body: JSON.stringify({ to_user_id: toUserId }) })
+          if (res?.room_id) setTradeRoomId(res.room_id)
+        }}
+      />}
 
       {/* Watermark */}
       <div style={{
@@ -142,23 +158,33 @@ function App() {
         />
       )}
 
-      {/* Global challenge notification — shows on any page */}
+      {/* Global challenge notification */}
       <ChallengeNotification
         challenge={page !== 'battle' ? incomingChallenge : null}
-        onAccept={() => {
-          setBattleMode('accepting')
-          setPage('battle')
-        }}
+        onAccept={() => { setBattleMode('accepting'); setPage('battle') }}
         onDecline={async () => {
           setIncomingChallenge(null)
-          try {
-            await fetch('/api/challenges/decline', {
-              method: 'DELETE',
-              headers: { Authorization: `Bearer ${token}` },
-            })
-          } catch {}
+          try { await fetch('/api/challenges/decline', { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } }) } catch {}
         }}
       />
+
+      {/* Trade invite notification */}
+      {incomingTrade && !tradeRoomId && (
+        <div style={{ position: 'fixed', top: 16, left: '50%', transform: 'translateX(-50%)', zIndex: 999, background: '#0f1729', border: '1px solid rgba(168,85,247,0.6)', borderRadius: 14, padding: '14px 18px', boxShadow: '0 8px 32px rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', gap: 14, minWidth: 280 }} className="anim-fadeUp">
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: '#fff' }}>🤝 Trade offer</div>
+            <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.45)', marginTop: 2 }}>{incomingTrade.from_name} wants to trade</div>
+          </div>
+          <button onClick={() => { setTradeRoomId(incomingTrade.room_id); setIncomingTrade(null) }}
+            style={{ background: 'linear-gradient(135deg,#7c3aed,#a855f7)', border: 'none', borderRadius: 8, color: '#fff', padding: '7px 14px', fontSize: 12, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+            Accept
+          </button>
+          <button onClick={async () => { setIncomingTrade(null); try { await apiFetch('/api/trades/decline', token, { method: 'DELETE' }) } catch {} }}
+            style={{ background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 8, color: '#ef4444', padding: '7px 12px', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+            Decline
+          </button>
+        </div>
+      )}
     </div>
   )
 }

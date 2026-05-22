@@ -13,7 +13,7 @@ const TABS = [
   { id: 'battle',     icon: 'swords',         label: 'Battle' },
 ]
 
-export default function Nav({ page, setPage, participants = [], user, token, setBattleMode, setAutoChallenge }) {
+export default function Nav({ page, setPage, participants = [], user, token, setBattleMode, setAutoChallenge, onTrade }) {
   const [showPanel, setShowPanel]       = useState(false)
   const [viewingProfile, setViewingProfile] = useState(null)
 
@@ -92,6 +92,7 @@ export default function Nav({ page, setPage, participants = [], user, token, set
         token={token}
         viewUser={viewingProfile}
         onClose={() => setViewingProfile(null)}
+        onTrade={onTrade}
       />
     )}
     </>

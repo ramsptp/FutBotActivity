@@ -119,7 +119,7 @@ async def browse_market(search: str = "", page: int = 0, discord_user=Depends(ge
         SELECT ml.listing_id, ml.seller_id, ml.card_id, ml.edition, ml.trade_count,
                ml.price, ml.listed_at, ml.expires_at,
                c.name, c.overall, c.card_rarity, c.card_type, c.image_path,
-               c.attack, c.defense, c.speed,
+               c.attack, c.defense, c.speed, c.position, c.club, c.league, c.nation,
                (SELECT COUNT(*) FROM inventories WHERE card_id = c.card_id) +
                (SELECT COUNT(*) FROM market_listings WHERE card_id = c.card_id AND status = 'active') AS copies,
                p.name AS seller_name
@@ -159,7 +159,7 @@ async def my_listings(discord_user=Depends(get_current_user)):
         SELECT ml.listing_id, ml.seller_id, ml.card_id, ml.edition, ml.trade_count,
                ml.price, ml.listed_at, ml.expires_at,
                c.name, c.overall, c.card_rarity, c.card_type, c.image_path,
-               c.attack, c.defense, c.speed,
+               c.attack, c.defense, c.speed, c.position, c.club, c.league, c.nation,
                (SELECT COUNT(*) FROM inventories WHERE card_id = c.card_id) AS copies,
                p.name AS seller_name
         FROM market_listings ml

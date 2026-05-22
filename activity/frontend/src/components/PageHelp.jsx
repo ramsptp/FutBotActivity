@@ -31,6 +31,15 @@ const HELP = {
       { heading: 'Strategy', points: ['Balance ATK, DEF, and SPD across your 5 cards', 'You pick the stat on odd rounds — stack ATK for attacking', 'Your opponent picks on even rounds — don\'t neglect DEF', 'You can have multiple decks and switch before each match'] },
     ],
   },
+  market: {
+    title: 'Transfer Market',
+    sections: [
+      { heading: 'Browsing', points: ['All active listings from every player', 'Search by player name to find specific cards', 'Click any listing to see full card stats — OVR, ATK, DEF, SPD, club, nation, and more'] },
+      { heading: 'Buying', points: ['Tap a listing card to view full details, then hit Buy', 'Coins are deducted instantly — the card goes straight to your collection', 'You cannot buy your own listings'] },
+      { heading: 'Listing a Card', points: ['Go to List Card, pick from your collection, set a price, choose a duration', 'Minimum price depends on card rarity and overall rating', 'Card is held in escrow — removed from collection until sold or expired', 'If unsold, the card is automatically returned when the listing expires'] },
+      { heading: 'My Listings', points: ['View and cancel your active listings at any time', 'Cancelling a listing immediately returns the card to your collection', 'Sold listings earn you the full listing price — no fees'] },
+    ],
+  },
   battle: {
     title: 'Battle',
     sections: [

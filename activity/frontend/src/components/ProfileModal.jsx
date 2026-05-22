@@ -29,7 +29,7 @@ function glowToDropShadow(glow) {
 }
 
 // viewUser = { user_id, name, avatar } — if set, viewing someone else's profile (read-only)
-export default function ProfileModal({ user, token, onClose, onTitleChange, viewUser = null }) {
+export default function ProfileModal({ user, token, onClose, onTitleChange, viewUser = null, onTrade = null }) {
   const [data, setData]             = useState(null)
   const [saving, setSaving]         = useState(false)
   const [saved, setSaved]           = useState(false)
@@ -83,6 +83,12 @@ export default function ProfileModal({ user, token, onClose, onTitleChange, view
               }
               {isOwn && <div style={s.coins}>🪙 {data?.player?.coins?.toLocaleString() ?? '—'} coins</div>}
             </div>
+            {viewUser && onTrade && (
+              <button onClick={() => { onTrade(viewUser.user_id); onClose() }}
+                style={{ background: 'linear-gradient(135deg,#7c3aed,#a855f7)', border: 'none', borderRadius: 10, color: '#fff', padding: '7px 16px', fontSize: 13, fontWeight: 800, cursor: 'pointer', marginRight: 8, whiteSpace: 'nowrap' }}>
+                🤝 Trade
+              </button>
+            )}
             <button onClick={onClose} style={s.closeBtn}>✕</button>
           </div>
 

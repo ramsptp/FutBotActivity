@@ -936,7 +936,7 @@ export default function Packs({ token, starterCards = null, onStarterDone = null
     <div className="page">
       <PageTip page="packs" />
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
-        <h2 style={{ color: '#fff', fontWeight: 700, fontSize: 20 }}>📦 My Packs</h2>
+        <h2 style={{ color: '#fff', fontWeight: 700, fontSize: 20 }}>My Packs</h2>
         <PageHelp page="packs" />
       </div>
       {error && <div style={{ background: '#3d1515', color: '#f87171', borderRadius: 8, padding: '8px 12px', marginBottom: 12, fontSize: 13 }}>{error}</div>}
