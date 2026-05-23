@@ -13,6 +13,8 @@ from routes.shop import router as shop_router
 from routes.profile import router as profile_router
 from routes.market import router as market_router
 from routes.trades import router as trades_router
+from routes.friends import router as friends_router
+from routes.leaderboard import router as leaderboard_router
 from db import get_db
 
 app = FastAPI()
@@ -70,8 +72,44 @@ def _run_migrations():
             buyer_id    INTEGER
         )
     """)
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS friendships (
+            user_id   INTEGER,
+            friend_id INTEGER,
+            added_at  TEXT DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (user_id, friend_id)
+        )
+    """)
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS friend_requests (
+            request_id   INTEGER PRIMARY KEY AUTOINCREMENT,
+            requester_id INTEGER,
+            recipient_id INTEGER,
+            requested_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            notified     INTEGER DEFAULT 0,
+            UNIQUE(requester_id, recipient_id)
+        )
+    """)
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS channel_members (
+            channel_id TEXT,
+            user_id    INTEGER,
+            first_seen TEXT DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (channel_id, user_id)
+        )
+    """)
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS guild_members (
+            guild_id   TEXT,
+            user_id    INTEGER,
+            first_seen TEXT DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (guild_id, user_id)
+        )
+    """)
     db.commit()
     migrations = [
+        ("players",         "avatar",   "TEXT"),
+        ("channel_members", "guild_id", "TEXT"),
         ("players", "daily_streak",        "INTEGER DEFAULT 0"),
         ("players", "last_daily_claim",    "TEXT"),
         ("players", "daily_pending_card1", "INTEGER"),
@@ -104,6 +142,8 @@ app.include_router(shop_router, prefix="/api")
 app.include_router(profile_router, prefix="/api")
 app.include_router(market_router,  prefix="/api")
 app.include_router(trades_router)
+app.include_router(friends_router,     prefix="/api")
+app.include_router(leaderboard_router, prefix="/api")
 
 @app.get("/api/health")
 def health():

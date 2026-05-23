@@ -7,6 +7,7 @@ import httpx
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query, Depends
 from pydantic import BaseModel
 from auth import get_current_user
+from db import get_db
 
 router = APIRouter()
 
@@ -27,6 +28,7 @@ pending_challenges: dict[str, dict] = {}
 
 class LobbyRegister(BaseModel):
     channel_id: str
+    guild_id: str | None = None
 
 class ChallengeBody(BaseModel):
     to_user_id: str
@@ -35,13 +37,45 @@ class ChallengeBody(BaseModel):
 
 @router.post("/api/lobby/register")
 async def register_lobby(body: LobbyRegister, discord_user=Depends(get_current_user)):
-    user_id = discord_user["id"]
-    channel = lobby.setdefault(body.channel_id, {})
+    user_id  = discord_user["id"]
+    username = discord_user["username"]
+    avatar   = discord_user.get("avatar")
+    channel  = lobby.setdefault(body.channel_id, {})
     channel[user_id] = {
-        "name": discord_user["username"],
-        "avatar": discord_user.get("avatar"),
+        "name":   username,
+        "avatar": avatar,
         "expires_at": time.time() + 35,
     }
+    # Persist VC + guild membership so leaderboards can include offline players
+    try:
+        db = get_db()
+        db.execute(
+            "INSERT OR IGNORE INTO channel_members (channel_id, user_id, guild_id) VALUES (?, ?, ?)",
+            (body.channel_id, int(user_id), body.guild_id)
+        )
+        if body.guild_id:
+            # Backfill guild_id for any historical members of this channel that
+            # were registered before we started capturing guild_id
+            db.execute(
+                "UPDATE channel_members SET guild_id=? WHERE channel_id=? AND guild_id IS NULL",
+                (body.guild_id, body.channel_id)
+            )
+            db.execute(
+                "INSERT OR IGNORE INTO guild_members (guild_id, user_id) VALUES (?, ?)",
+                (body.guild_id, int(user_id))
+            )
+        # Keep player name + avatar fresh so leaderboards / friends show correct identity
+        existing = db.execute("SELECT name, avatar FROM players WHERE user_id=?", (int(user_id),)).fetchone()
+        if not existing:
+            db.execute("INSERT OR IGNORE INTO players (user_id, name, avatar) VALUES (?,?,?)",
+                       (int(user_id), username, avatar))
+        else:
+            if existing["name"] != username or existing["avatar"] != avatar:
+                db.execute("UPDATE players SET name=?, avatar=? WHERE user_id=?",
+                           (username, avatar, int(user_id)))
+        db.commit()
+    except Exception:
+        pass
     return {"ok": True}
 
 @router.get("/api/lobby/participants")

@@ -31,12 +31,19 @@ async def exchange_token(body: TokenRequest):
 
 @router.get("/me")
 async def get_me(discord_user=Depends(get_current_user)):
-    user_id = discord_user["id"]
+    user_id  = discord_user["id"]
     username = discord_user["username"]
+    avatar   = discord_user.get("avatar")
     db = get_db()
     player = db.execute("SELECT * FROM players WHERE user_id = ?", (user_id,)).fetchone()
     if not player:
-        db.execute("INSERT INTO players (user_id, name) VALUES (?, ?)", (int(user_id), username))
+        db.execute("INSERT INTO players (user_id, name, avatar) VALUES (?, ?, ?)",
+                   (int(user_id), username, avatar))
         db.commit()
-        player = db.execute("SELECT * FROM players WHERE user_id = ?", (user_id,)).fetchone()
+    else:
+        # Keep avatar fresh (cheap; only update if changed)
+        if avatar and player["avatar"] != avatar:
+            db.execute("UPDATE players SET avatar=? WHERE user_id=?", (avatar, int(user_id)))
+            db.commit()
+    player = db.execute("SELECT * FROM players WHERE user_id = ?", (user_id,)).fetchone()
     return {**discord_user, "player": dict(player)}

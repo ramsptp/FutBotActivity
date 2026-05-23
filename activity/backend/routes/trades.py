@@ -31,7 +31,7 @@ trade_rooms: dict[str, dict] = {}              # room_id -> room state
 
 
 class TradeInviteBody(BaseModel):
-    to_user_id: int
+    to_user_id: int | str
 
 
 def _img(path):
@@ -78,13 +78,14 @@ async def _broadcast(room: dict, msg: dict):
 async def send_trade_invite(body: TradeInviteBody, discord_user=Depends(get_current_user)):
     from_id   = int(discord_user["id"])
     from_name = discord_user.get("username", "Unknown")
+    to_id     = int(body.to_user_id)
 
-    if from_id == body.to_user_id:
+    if from_id == to_id:
         raise HTTPException(status_code=400, detail="Cannot trade with yourself")
 
     room_id = str(uuid.uuid4())[:8]
 
-    pending_trade_invites[body.to_user_id] = {
+    pending_trade_invites[to_id] = {
         "from_user_id": from_id,
         "from_name":    from_name,
         "room_id":      room_id,
@@ -94,7 +95,7 @@ async def send_trade_invite(body: TradeInviteBody, discord_user=Depends(get_curr
     trade_rooms[room_id] = {
         "room_id": room_id,
         "p1_id": from_id,        "p1_name": from_name,
-        "p2_id": body.to_user_id, "p2_name": "",
+        "p2_id": to_id,          "p2_name": "",
         "p1_offer": {"cards": [], "coins": 0},
         "p2_offer": {"cards": [], "coins": 0},
         "p1_locked": False,    "p2_locked": False,

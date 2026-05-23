@@ -4,6 +4,9 @@ import OnlinePanel from '../components/OnlinePanel'
 import ProfileModal from '../components/ProfileModal'
 import HowToPlayModal from '../components/HowToPlayModal'
 import SettingsModal from '../components/SettingsModal'
+import FriendsPanel from '../components/FriendsPanel'
+import LeaderboardTile from '../components/LeaderboardTile'
+import LeaderboardModal from '../components/LeaderboardModal'
 import { toggleMute } from '../lib/sounds'
 
 const NAV = [
@@ -25,7 +28,7 @@ const EMBERS = [
   { left: '92%', size: 5,  delay: '5s',  dur: '7s' },
 ]
 
-export default function Home({ token, user, setPage, participants = [], setBattleMode, onStarterClaim, tutorialStep = 0, onTutorialAdvance, onTutorialSkip, setAutoChallenge, onTrade }) {
+export default function Home({ token, user, setPage, participants = [], setBattleMode, onStarterClaim, tutorialStep = 0, onTutorialAdvance, onTutorialSkip, setAutoChallenge, onTrade, channelId, guildId }) {
   const [player, setPlayer]             = useState(null)
   const [packs, setPacks]               = useState(null)
   const [showOnlinePanel, setShowOnlinePanel] = useState(false)
@@ -33,7 +36,19 @@ export default function Home({ token, user, setPage, participants = [], setBattl
   const [viewingProfile, setViewingProfile] = useState(null) // { user_id, name, avatar }
   const [showHowToPlay, setShowHowToPlay] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
+  const [showFriends, setShowFriends]   = useState(false)
+  const [pendingReqs, setPendingReqs]   = useState(0)
+  const [showLeaderboard, setShowLeaderboard] = useState(null) // null | initial scope key
+  const [lbCollapsed, setLbCollapsed]   = useState(() => localStorage.getItem('futbot-lb-collapsed') === 'true')
   const [muted, setMuted] = useState(() => localStorage.getItem('futbot-muted') === 'true')
+
+  function toggleLb() {
+    setLbCollapsed(c => {
+      const next = !c
+      try { localStorage.setItem('futbot-lb-collapsed', next ? 'true' : 'false') } catch {}
+      return next
+    })
+  }
 
   useEffect(() => {
     apiFetch('/api/me', token).then(async data => {
@@ -47,6 +62,17 @@ export default function Home({ token, user, setPage, participants = [], setBattl
     }).catch(() => {})
     apiFetch('/api/packs', token).then(setPacks).catch(() => {})
   }, [])
+
+  // Poll friend-request count every 15s for badge
+  useEffect(() => {
+    const fetchPending = () =>
+      apiFetch('/api/friends/notifications', token).then(d => setPendingReqs(d?.pending || 0)).catch(() => {})
+    fetchPending()
+    const id = setInterval(fetchPending, 15000)
+    return () => clearInterval(id)
+  }, [token])
+
+  const onlineIdsSet = new Set(participants.map(p => String(p.user_id)))
 
   const totalPacks = packs ? Object.values(packs).reduce((a, b) => a + b, 0) : 0
 
@@ -73,6 +99,26 @@ export default function Home({ token, user, setPage, participants = [], setBattl
 
       {showHowToPlay && <HowToPlayModal onClose={() => setShowHowToPlay(false)} />}
       {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
+      {showFriends && (
+        <FriendsPanel
+          token={token}
+          onClose={() => setShowFriends(false)}
+          onTrade={onTrade}
+          onViewProfile={p => setViewingProfile(p)}
+          onlineIds={onlineIdsSet}
+          onPendingCountChange={setPendingReqs}
+        />
+      )}
+      {showLeaderboard && (
+        <LeaderboardModal
+          token={token}
+          channelId={channelId}
+          guildId={guildId}
+          initialScope={showLeaderboard}
+          onClose={() => setShowLeaderboard(null)}
+          onViewProfile={p => setViewingProfile(p)}
+        />
+      )}
 
       {/* Ember particles */}
       <div style={s.embers}>
@@ -89,7 +135,7 @@ export default function Home({ token, user, setPage, participants = [], setBattl
 
       {/* ── TOP BAR ── */}
       <header style={s.topbar}>
-        {/* Logo */}
+        {/* Logo + leaderboard toggle */}
         <div style={s.logoArea}>
           <div style={s.logoHex}>
             <span className="material-symbols-outlined" style={{ fontSize: 26, color: '#fff', fontVariationSettings: "'FILL' 1" }}>sports_soccer</span>
@@ -98,6 +144,19 @@ export default function Home({ token, user, setPage, participants = [], setBattl
             <div style={s.logoText}>FUTBOT</div>
             <div style={s.logoSub}>FOOTBALL CARD BATTLES</div>
           </div>
+          <button onClick={toggleLb}
+            style={{
+              ...s.lbToggle,
+              background: lbCollapsed ? 'rgba(255,255,255,0.04)' : 'rgba(255,202,69,0.1)',
+              borderColor: lbCollapsed ? 'rgba(255,255,255,0.08)' : 'rgba(255,202,69,0.4)',
+              color: lbCollapsed ? 'rgba(255,255,255,0.45)' : '#ffca45',
+            }}
+            title={lbCollapsed ? 'Show leaderboard' : 'Hide leaderboard'}
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: 14, fontVariationSettings: lbCollapsed ? "'FILL' 0" : "'FILL' 1" }}>emoji_events</span>
+            <span style={{ marginLeft: 4 }}>LEADERBOARD</span>
+            <span className="material-symbols-outlined" style={{ fontSize: 14, marginLeft: 2 }}>{lbCollapsed ? 'expand_more' : 'expand_less'}</span>
+          </button>
         </div>
 
         {/* Currency + Profile */}
@@ -108,6 +167,13 @@ export default function Home({ token, user, setPage, participants = [], setBattl
           </button>
           {/* How to Play */}
           <button onClick={() => setShowHowToPlay(true)} style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: '50%', width: 32, height: 32, color: 'rgba(255,255,255,0.7)', fontSize: 14, fontWeight: 700, cursor: 'pointer', flexShrink: 0 }}>?</button>
+          {/* Friends */}
+          <button onClick={() => setShowFriends(true)} style={s.friendsBtn} title="Friends">
+            <span className="material-symbols-outlined" style={{ fontSize: 18, color: pendingReqs > 0 ? '#ffca45' : 'rgba(255,255,255,0.75)', fontVariationSettings: "'FILL' 1" }}>group</span>
+            {pendingReqs > 0 && (
+              <span style={s.friendsBadge}>{pendingReqs > 9 ? '9+' : pendingReqs}</span>
+            )}
+          </button>
           {/* Currency pill */}
           <div style={s.currencyPill}>
             <div style={s.coinBlock}>
@@ -137,6 +203,15 @@ export default function Home({ token, user, setPage, participants = [], setBattl
           <button onClick={() => setShowSettings(true)} style={s.settingsBtn}><span className="material-symbols-outlined" style={{ fontSize: 20, color: '#fff' }}>settings</span></button>
         </div>
       </header>
+
+      {/* Floating "TOP PLAYERS" widget under logo */}
+      <LeaderboardTile
+        token={token}
+        channelId={channelId}
+        guildId={guildId}
+        collapsed={lbCollapsed}
+        onOpen={(scope) => setShowLeaderboard(scope || 'server')}
+      />
 
       {/* ── PANELS ── */}
       <div style={s.main}>
@@ -242,6 +317,10 @@ export default function Home({ token, user, setPage, participants = [], setBattl
           0%,100% { box-shadow: 0 4px 20px rgba(228,174,0,0.5); transform: scale(1); }
           50%      { box-shadow: 0 4px 30px rgba(228,174,0,0.7); transform: scale(1.02); }
         }
+        @keyframes badgePulse {
+          0%,100% { transform: scale(1); box-shadow: 0 2px 6px rgba(239,68,68,0.5); }
+          50%      { transform: scale(1.1); box-shadow: 0 2px 10px rgba(239,68,68,0.8); }
+        }
       `}</style>
     </div>
   )
@@ -266,6 +345,16 @@ const s = {
     padding: '18px 24px', position: 'relative', zIndex: 10, flexShrink: 0,
   },
   logoArea: { display: 'flex', alignItems: 'center', gap: 12 },
+  lbToggle: {
+    display: 'inline-flex', alignItems: 'center',
+    border: '1px solid', borderRadius: 999,
+    padding: '5px 10px 5px 8px',
+    fontFamily: MONTSERRAT, fontWeight: 800, fontSize: 10,
+    letterSpacing: '0.12em', textTransform: 'uppercase',
+    cursor: 'pointer', marginLeft: 6,
+    transition: 'all 0.2s',
+    backdropFilter: 'blur(8px)',
+  },
   logoHex: {
     width: 48, height: 48, clipPath: HEX,
     background: '#171f33', border: '1px solid rgba(255,255,255,0.15)',
@@ -320,6 +409,25 @@ const s = {
     background: 'rgba(15,23,42,0.8)', backdropFilter: 'blur(12px)',
     border: '1px solid rgba(255,255,255,0.05)',
     display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
+  },
+  friendsBtn: {
+    position: 'relative',
+    background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)',
+    borderRadius: '50%', width: 32, height: 32, cursor: 'pointer', flexShrink: 0,
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    transition: 'all 0.15s',
+  },
+  friendsBadge: {
+    position: 'absolute', top: -3, right: -3,
+    minWidth: 16, height: 16, padding: '0 4px',
+    borderRadius: 999,
+    background: 'linear-gradient(135deg, #ef4444, #dc2626)',
+    color: '#fff', fontSize: 9, fontWeight: 900,
+    fontFamily: "'Montserrat', system-ui, sans-serif",
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    border: '1.5px solid #050914',
+    boxShadow: '0 2px 6px rgba(239,68,68,0.5)',
+    animation: 'badgePulse 1.8s ease infinite',
   },
 
   // Panels

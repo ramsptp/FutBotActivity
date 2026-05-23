@@ -67,11 +67,12 @@ function App() {
 
   function startLobby(token) {
     const channelId = discordSdk.channelId
+    const guildId   = discordSdk.guildId
     if (!channelId) return
 
     const register = () => apiFetch('/api/lobby/register', token, {
       method: 'POST',
-      body: JSON.stringify({ channel_id: channelId }),
+      body: JSON.stringify({ channel_id: channelId, guild_id: guildId || null }),
     }).catch(() => {})
 
     const fetchParticipants = async () => {
@@ -109,6 +110,8 @@ function App() {
       background: "url('/background.png') center center / cover no-repeat fixed",
     } : undefined}>
       {page === 'home' && <Home token={token} user={user} setPage={setPage} participants={participants} setBattleMode={setBattleMode} onStarterClaim={cards => { setStarterCards(cards); setTutorialStep(1); setPage('packs') }} tutorialStep={tutorialStep} onTutorialAdvance={advanceTutorial} onTutorialSkip={skipTutorial} setAutoChallenge={setAutoChallenge}
+        channelId={discordSdk.channelId}
+        guildId={discordSdk.guildId}
         onTrade={async (toUserId) => {
           const res = await apiFetch('/api/trades/invite', token, { method: 'POST', body: JSON.stringify({ to_user_id: toUserId }) })
           if (res?.room_id) setTradeRoomId(res.room_id)
