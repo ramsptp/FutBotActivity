@@ -200,6 +200,30 @@ function ListingDetailModal({ listing, onClose, onBuy, buying }) {
           </div>
         )}
 
+        {/* Card battle record */}
+        {(listing.total_rounds_played > 0) && (() => {
+          const rp = listing.total_rounds_played || 0
+          const rw = listing.total_rounds_won || 0
+          const wr = rp > 0 ? Math.round((rw / rp) * 100) : 0
+          return (
+            <div style={{ background: '#0d1524', borderRadius: 12, border: '1px solid rgba(255,255,255,0.06)', overflow: 'hidden', marginBottom: 10 }}>
+              <div style={{ padding: '6px 14px 4px', fontSize: 9, fontWeight: 700, color: 'rgba(255,255,255,0.25)', letterSpacing: 2, textTransform: 'uppercase' }}>Card Record</div>
+              <div style={{ display: 'flex' }}>
+                {[
+                  ['Rounds', rp, '#94a3b8'],
+                  ['Won', rw, '#22c55e'],
+                  ['Win Rate', `${wr}%`, wr >= 50 ? '#22c55e' : '#f97316'],
+                ].map(([label, value, color]) => (
+                  <div key={label} style={{ flex: 1, textAlign: 'center', padding: '8px 0 10px', borderRight: '1px solid rgba(255,255,255,0.05)' }}>
+                    <div style={{ fontSize: 16, fontWeight: 900, color, fontFamily: "'Montserrat',sans-serif", lineHeight: 1 }}>{value}</div>
+                    <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.28)', marginTop: 3, letterSpacing: 1 }}>{label}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )
+        })()}
+
         {/* Seller / price / time */}
         <div style={{ background: '#0d1524', borderRadius: 12, border: '1px solid rgba(255,255,255,0.06)', overflow: 'hidden', marginBottom: 16 }}>
           {[

@@ -5,6 +5,19 @@ import { avatarUrl, FALLBACK_AVATAR } from '../lib/avatar'
 const MONTSERRAT = "'Montserrat', system-ui, sans-serif"
 const INTER      = "'Inter', system-ui, sans-serif"
 
+function timeAgo(dateStr) {
+  if (!dateStr) return ''
+  try {
+    const d = new Date(String(dateStr).replace(' ', 'T') + 'Z')
+    const s = Math.floor((Date.now() - d) / 1000)
+    if (s < 60)        return 'just now'
+    if (s < 3600)      return `${Math.floor(s / 60)}m ago`
+    if (s < 86400)     return `${Math.floor(s / 3600)}h ago`
+    if (s < 86400 * 7) return `${Math.floor(s / 86400)}d ago`
+    return `${Math.floor(s / (86400 * 7))}w ago`
+  } catch { return '' }
+}
+
 function Avatar({ user_id, avatar, name, online, size = 38 }) {
   return (
     <div style={{ position: 'relative', flexShrink: 0 }}>
@@ -41,7 +54,7 @@ function Toast({ msg, ok }) {
   )
 }
 
-export default function FriendsPanel({ token, onClose, onTrade, onViewProfile, onlineIds = new Set(), onPendingCountChange }) {
+export default function FriendsPanel({ token, onClose, onTrade, onViewProfile, onlineIds = new Set(), onPendingCountChange, participants = [] }) {
   const [tab, setTab]                 = useState('friends')
   const [friends, setFriends]         = useState(null)
   const [requests, setRequests]       = useState({ incoming: [], outgoing: [] })
@@ -58,6 +71,8 @@ export default function FriendsPanel({ token, onClose, onTrade, onViewProfile, o
   useEffect(() => {
     loadFriends()
     loadRequests()
+    const id = setInterval(loadRequests, 20000)
+    return () => clearInterval(id)
   }, [])
 
   useEffect(() => {
@@ -175,7 +190,7 @@ export default function FriendsPanel({ token, onClose, onTrade, onViewProfile, o
           </div>
           <div style={{ flex: 1 }}>
             <div style={s.headerTitle}>Friends</div>
-            <div style={s.headerSub}>{friends?.length ?? 0} connected · {incomingCount} pending</div>
+            <div style={s.headerSub}>{friends?.length ?? 0} friends · {incomingCount} pending</div>
           </div>
           <button onClick={onClose} style={s.closeBtn}>
             <span className="material-symbols-outlined" style={{ fontSize: 20 }}>close</span>
@@ -246,7 +261,7 @@ export default function FriendsPanel({ token, onClose, onTrade, onViewProfile, o
                         </div>
                         <div style={s.cardActions}>
                           {onViewProfile && (
-                            <button onClick={() => { onViewProfile({ user_id: String(f.user_id), name: f.name, avatar: f.avatar }); onClose() }}
+                            <button onClick={() => onViewProfile({ user_id: String(f.user_id), name: f.name, avatar: f.avatar })}
                               style={s.iconBtn} title="View profile">
                               <span className="material-symbols-outlined" style={{ fontSize: 16 }}>person</span>
                             </button>
@@ -279,10 +294,16 @@ export default function FriendsPanel({ token, onClose, onTrade, onViewProfile, o
                 <div style={s.list}>
                   {requests.incoming.map((r, i) => (
                     <div key={r.request_id} style={{ ...s.card, ...s.incomingCard, animationDelay: `${i * 0.04}s` }} className="anim-fadeUp">
-                      <Avatar user_id={r.user_id} avatar={r.avatar} name={r.name} />
-                      <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ cursor: onViewProfile ? 'pointer' : 'default', flexShrink: 0 }}
+                        onClick={() => onViewProfile?.({ user_id: String(r.user_id), name: r.name, avatar: r.avatar })}>
+                        <Avatar user_id={r.user_id} avatar={r.avatar} name={r.name} />
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0, cursor: onViewProfile ? 'pointer' : 'default' }}
+                        onClick={() => onViewProfile?.({ user_id: String(r.user_id), name: r.name, avatar: r.avatar })}>
                         <div style={s.cardName}>{r.name}</div>
-                        <div style={{ ...s.cardSub, color: '#ffca45' }}>wants to be friends</div>
+                        <div style={{ ...s.cardSub, color: '#ffca45' }}>
+                          requested you · {timeAgo(r.requested_at)}
+                        </div>
                       </div>
                       <button onClick={() => declineReq(r)} style={s.declineBtn}>
                         <span className="material-symbols-outlined" style={{ fontSize: 16 }}>close</span>
@@ -353,23 +374,26 @@ export default function FriendsPanel({ token, onClose, onTrade, onViewProfile, o
                 <div style={s.list}>
                   {results.map((p, i) => (
                     <div key={p.user_id} style={{ ...s.card, animationDelay: `${i * 0.04}s` }} className="anim-fadeUp">
-                      <Avatar user_id={p.user_id} avatar={p.avatar} name={p.name} />
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={s.cardName}>{p.name}</div>
-                        <div style={s.cardSub}>
-                          <span style={{ color: '#ffca45' }}>{p.battles_won}W</span>
-                          <span style={{ color: '#334155', margin: '0 6px' }}>·</span>
-                          <span style={{ color: '#94a3b8' }}>🪙 {p.coins.toLocaleString()}</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 0, cursor: onViewProfile ? 'pointer' : 'default' }}
+                        onClick={() => onViewProfile?.({ user_id: String(p.user_id), name: p.name, avatar: p.avatar })}>
+                        <Avatar user_id={p.user_id} avatar={p.avatar} name={p.name} />
+                        <div style={{ minWidth: 0 }}>
+                          <div style={s.cardName}>{p.name}</div>
+                          {onViewProfile && (
+                            <div style={{ ...s.cardSub, color: '#a855f7', fontSize: 10, fontWeight: 700, letterSpacing: '0.05em' }}>
+                              View Profile →
+                            </div>
+                          )}
                         </div>
                       </div>
                       {p.is_friend ? (
                         <span style={s.statusChip('#4ade80')}>Friends</span>
                       ) : p.pending_in ? (
-                        <span style={s.statusChip('#ffca45')}>Wants you</span>
+                        <span style={s.statusChip('#ffca45')}>Received</span>
                       ) : p.pending_out ? (
                         <span style={s.statusChip('#94a3b8')}>Sent</span>
                       ) : (
-                        <button onClick={() => sendRequest(p)} style={s.addBtn}>
+                        <button onClick={e => { e.stopPropagation(); sendRequest(p) }} style={s.addBtn}>
                           <span className="material-symbols-outlined" style={{ fontSize: 16 }}>person_add</span>
                           Add
                         </button>
@@ -379,7 +403,43 @@ export default function FriendsPanel({ token, onClose, onTrade, onViewProfile, o
                 </div>
               )}
 
-              {!search && (
+              {!search && participants.length > 0 && (
+                <>
+                  <SectionLabel>In Your Voice Channel · {participants.length}</SectionLabel>
+                  <div style={{ ...s.list, marginBottom: 20 }}>
+                    {participants.map((p, i) => {
+                      const isFriend  = friends?.some(f => String(f.user_id) === String(p.user_id))
+                      const pendingOut = requests.outgoing?.some(r => String(r.user_id) === String(p.user_id))
+                      const pendingIn  = requests.incoming?.some(r => String(r.user_id) === String(p.user_id))
+                      return (
+                        <div key={p.user_id} style={{ ...s.card, animationDelay: `${i * 0.04}s` }} className="anim-fadeUp">
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 0, cursor: onViewProfile ? 'pointer' : 'default' }}
+                            onClick={() => onViewProfile?.({ user_id: String(p.user_id), name: p.name, avatar: p.avatar })}>
+                            <Avatar user_id={String(p.user_id)} avatar={p.avatar} name={p.name} online={true} />
+                            <div style={{ minWidth: 0 }}>
+                              <div style={s.cardName}>{p.name}</div>
+                              <div style={s.cardSub}><span style={{ color: '#4ade80', fontWeight: 700 }}>● In your VC</span></div>
+                            </div>
+                          </div>
+                          {isFriend ? (
+                            <span style={s.statusChip('#4ade80')}>Friends</span>
+                          ) : pendingIn ? (
+                            <span style={s.statusChip('#ffca45')}>Received</span>
+                          ) : pendingOut ? (
+                            <span style={s.statusChip('#94a3b8')}>Sent</span>
+                          ) : (
+                            <button onClick={() => sendRequest(p)} style={s.addBtn}>
+                              <span className="material-symbols-outlined" style={{ fontSize: 16 }}>person_add</span>
+                              Add
+                            </button>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                </>
+              )}
+              {!search && participants.length === 0 && (
                 <EmptyState
                   icon="person_search"
                   title="Find players"

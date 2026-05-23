@@ -261,6 +261,15 @@ async def resolve_round(room):
             db.execute("UPDATE players SET rounds_drawn = rounds_drawn + 1 WHERE user_id = ?", (int(pid),))
     db.commit()
 
+    # Update per-card round stats
+    for pid in player_ids:
+        played_card_id = room["picks"][pid]["card_id"]
+        db.execute("UPDATE cards SET total_rounds_played = total_rounds_played + 1 WHERE card_id = ?", (played_card_id,))
+    if winner_id:
+        winner_card_id = room["picks"][winner_id]["card_id"]
+        db.execute("UPDATE cards SET total_rounds_won = total_rounds_won + 1 WHERE card_id = ?", (winner_card_id,))
+    db.commit()
+
     # Remove played cards
     for pid in player_ids:
         played_id = room["picks"][pid]["card_id"]
@@ -307,18 +316,41 @@ async def end_game(room):
     s1, s2 = room["score"][p1_id], room["score"][p2_id]
 
     if s1 == s2:
+        winner_id = None
         update_battle_stats(db, p1_id, p2_id, is_draw=True)
         db.execute("UPDATE players SET coins = coins + 150 WHERE user_id = ?", (int(p1_id),))
         db.execute("UPDATE players SET coins = coins + 150 WHERE user_id = ?", (int(p2_id),))
     elif s1 > s2:
+        winner_id = p1_id
         update_battle_stats(db, p1_id, p2_id, is_draw=False)
         db.execute("UPDATE players SET coins = coins + 200 WHERE user_id = ?", (int(p1_id),))
         db.execute("UPDATE players SET coins = coins + 100 WHERE user_id = ?", (int(p2_id),))
     else:
+        winner_id = p2_id
         update_battle_stats(db, p2_id, p1_id, is_draw=False)
         db.execute("UPDATE players SET coins = coins + 200 WHERE user_id = ?", (int(p2_id),))
         db.execute("UPDATE players SET coins = coins + 100 WHERE user_id = ?", (int(p1_id),))
     db.commit()
+
+    # Record battle history
+    try:
+        db.execute("""
+            INSERT INTO battle_history (p1_id, p2_id, p1_name, p2_name, p1_score, p2_score, winner_id, mode)
+            VALUES (?,?,?,?,?,?,?,?)
+        """, (int(p1_id), int(p2_id),
+              room["players"][p1_id]["name"], room["players"][p2_id]["name"],
+              s1, s2, int(winner_id) if winner_id else None, room.get("mode", "deck")))
+        db.commit()
+    except Exception:
+        pass
+
+    # Award achievements for both players
+    try:
+        from routes.profile import check_and_award
+        for uid in player_ids:
+            check_and_award(db, int(uid))
+    except Exception:
+        pass
 
     for pid in player_ids:
         opp_id = next(x for x in player_ids if x != pid)
@@ -517,6 +549,8 @@ async def battle_ws(
 
     room["players"][user_id] = {"ws": websocket, "name": username, "hand": None, "deck_name": None}
     room["score"][user_id] = 0
+    # Consume any pending challenge for this player so it doesn't re-notify after the game
+    pending_challenges.pop(user_id, None)
 
     if len(room["players"]) == 1:
         await send_to(room["players"][user_id], {"type": "waiting", "room_id": room_id})

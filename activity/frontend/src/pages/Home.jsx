@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { apiFetch } from '../lib/api'
 import OnlinePanel from '../components/OnlinePanel'
 import ProfileModal from '../components/ProfileModal'
+import FullScreenProfile from '../components/FullScreenProfile'
 import HowToPlayModal from '../components/HowToPlayModal'
 import SettingsModal from '../components/SettingsModal'
 import FriendsPanel from '../components/FriendsPanel'
@@ -41,6 +42,7 @@ export default function Home({ token, user, setPage, participants = [], setBattl
   const [showLeaderboard, setShowLeaderboard] = useState(null) // null | initial scope key
   const [lbCollapsed, setLbCollapsed]   = useState(() => localStorage.getItem('futbot-lb-collapsed') === 'true')
   const [muted, setMuted] = useState(() => localStorage.getItem('futbot-muted') === 'true')
+  const [friendIds, setFriendIds] = useState(new Set())
 
   function toggleLb() {
     setLbCollapsed(c => {
@@ -72,21 +74,21 @@ export default function Home({ token, user, setPage, participants = [], setBattl
     return () => clearInterval(id)
   }, [token])
 
+  useEffect(() => {
+    apiFetch('/api/friends', token)
+      .then(list => setFriendIds(new Set(list.map(f => String(f.user_id)))))
+      .catch(() => {})
+  }, [token])
+
   const onlineIdsSet = new Set(participants.map(p => String(p.user_id)))
+  const hasOnlineFriend = participants.some(p => friendIds.has(String(p.user_id)))
 
   const totalPacks = packs ? Object.values(packs).reduce((a, b) => a + b, 0) : 0
 
   return (
     <div style={s.root}>
-      {viewingProfile && (
-        <ProfileModal
-          user={user}
-          token={token}
-          viewUser={viewingProfile}
-          onClose={() => setViewingProfile(null)}
-          onTrade={onTrade}
-        />
-      )}
+      {showHowToPlay && <HowToPlayModal onClose={() => setShowHowToPlay(false)} />}
+      {showSettings && <SettingsModal onClose={() => setShowSettings(false)} token={token} player={player} onPlayerPatch={patch => setPlayer(p => ({ ...p, ...patch }))} />}
 
       {showProfile && (
         <ProfileModal
@@ -94,11 +96,10 @@ export default function Home({ token, user, setPage, participants = [], setBattl
           token={token}
           onClose={() => setShowProfile(false)}
           onTitleChange={title => setPlayer(p => ({ ...p, display_title: title || null }))}
+          onViewFull={() => { setShowProfile(false); setViewingProfile({ user_id: user.id, name: user.username, avatar: user.avatar }) }}
         />
       )}
 
-      {showHowToPlay && <HowToPlayModal onClose={() => setShowHowToPlay(false)} />}
-      {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
       {showFriends && (
         <FriendsPanel
           token={token}
@@ -107,6 +108,7 @@ export default function Home({ token, user, setPage, participants = [], setBattl
           onViewProfile={p => setViewingProfile(p)}
           onlineIds={onlineIdsSet}
           onPendingCountChange={setPendingReqs}
+          participants={participants}
         />
       )}
       {showLeaderboard && (
@@ -117,6 +119,19 @@ export default function Home({ token, user, setPage, participants = [], setBattl
           initialScope={showLeaderboard}
           onClose={() => setShowLeaderboard(null)}
           onViewProfile={p => setViewingProfile(p)}
+        />
+      )}
+
+      {/* Full-screen profile — rendered last so it's always on top */}
+      {viewingProfile && (
+        <FullScreenProfile
+          user={user}
+          token={token}
+          viewUser={String(viewingProfile.user_id) === String(user?.id) ? null : viewingProfile}
+          onClose={() => setViewingProfile(null)}
+          onTrade={onTrade}
+          onTitleChange={title => setPlayer(p => ({ ...p, display_title: title || null }))}
+          onlineIds={onlineIdsSet}
         />
       )}
 
@@ -173,6 +188,14 @@ export default function Home({ token, user, setPage, participants = [], setBattl
             {pendingReqs > 0 && (
               <span style={s.friendsBadge}>{pendingReqs > 9 ? '9+' : pendingReqs}</span>
             )}
+            {hasOnlineFriend && pendingReqs === 0 && (
+              <span style={{
+                position: 'absolute', top: -2, left: -2,
+                width: 10, height: 10, borderRadius: '50%',
+                background: '#4ade80', border: '2px solid #050914',
+                boxShadow: '0 0 6px rgba(74,222,128,0.8)',
+              }} />
+            )}
           </button>
           {/* Currency pill */}
           <div style={s.currencyPill}>
@@ -211,6 +234,7 @@ export default function Home({ token, user, setPage, participants = [], setBattl
         guildId={guildId}
         collapsed={lbCollapsed}
         onOpen={(scope) => setShowLeaderboard(scope || 'server')}
+        onViewProfile={p => setViewingProfile(p)}
       />
 
       {/* ── PANELS ── */}

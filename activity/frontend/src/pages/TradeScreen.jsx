@@ -180,17 +180,30 @@ export default function TradeScreen({ token, roomId, myUserId, myUsername, onClo
   const [result, setResult]         = useState(null)
   const [error, setError]           = useState(null)
   const [showPicker, setShowPicker] = useState(false)
+  const [joinedToast, setJoinedToast] = useState(null)
   const wsRef = useRef(null)
+  const prevStatusRef = useRef(null)
 
   useEffect(() => {
     const wsUrl = tradeWsUrl(roomId, token, myUserId, myUsername)
     const ws = new WebSocket(wsUrl)
     wsRef.current = ws
 
-    ws.onopen  = () => setError(null)   // clears any error from a previous failed attempt
+    ws.onopen  = () => setError(null)
     ws.onmessage = e => {
       const msg = JSON.parse(e.data)
-      if (msg.type === 'state')     { setTradeState(msg); setError(null) }
+      if (msg.type === 'state') {
+        setTradeState(prev => {
+          if (prevStatusRef.current === 'waiting' && msg.status === 'negotiating') {
+            const partnerName = msg.my_side === 'p1' ? msg.p2?.name : msg.p1?.name
+            setJoinedToast(partnerName || 'Your partner')
+            setTimeout(() => setJoinedToast(null), 3000)
+          }
+          prevStatusRef.current = msg.status
+          return msg
+        })
+        setError(null)
+      }
       if (msg.type === 'complete')  setResult(msg)
       if (msg.type === 'cancelled') {
         setError(msg.by ? `${msg.by} cancelled the trade` : 'Trade cancelled')
@@ -269,6 +282,20 @@ export default function TradeScreen({ token, roomId, myUserId, myUsername, onClo
   return (
     <div style={{ position: 'fixed', inset: 0, background: '#050914', zIndex: 200, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       <style>{`@keyframes tradeIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:none} }`}</style>
+
+      {/* Partner joined toast */}
+      {joinedToast && (
+        <div className="anim-fadeUp" style={{
+          position: 'absolute', top: 70, left: '50%', transform: 'translateX(-50%)',
+          background: 'linear-gradient(135deg, rgba(34,197,94,0.95), rgba(22,163,74,0.95))',
+          color: '#fff', borderRadius: 10, padding: '10px 20px', zIndex: 10,
+          fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap',
+          boxShadow: '0 4px 20px rgba(34,197,94,0.4)',
+          fontFamily: "'Montserrat',sans-serif", letterSpacing: '0.05em',
+        }}>
+          ✓ {joinedToast} joined the trade
+        </div>
+      )}
 
       {/* Header */}
       <div style={{ padding: '16px 16px 12px', borderBottom: '1px solid rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>

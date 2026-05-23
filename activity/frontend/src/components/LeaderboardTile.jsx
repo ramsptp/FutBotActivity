@@ -25,7 +25,7 @@ function formatVal(n) {
 
 // Floating "TOP PLAYERS" widget pinned under the FUTBOT logo.
 // Cycles through stat leaderboards (Server scope) as a slideshow.
-export default function LeaderboardTile({ token, channelId, guildId, onOpen, collapsed = false }) {
+export default function LeaderboardTile({ token, channelId, guildId, onOpen, onViewProfile, collapsed = false }) {
   const [statIdx, setStatIdx] = useState(0)
   const [data, setData]       = useState({})  // { [statKey]: response }
   const pausedRef = useRef(false)
@@ -125,8 +125,10 @@ export default function LeaderboardTile({ token, channelId, guildId, onOpen, col
               style={{
                 ...s.row,
                 animationDelay: `${i * 0.06}s`,
+                cursor: onViewProfile ? 'pointer' : 'default',
               }}
               className="lb-row-fade"
+              onClick={() => onViewProfile?.({ user_id: String(e.user_id), name: e.name, avatar: e.avatar })}
             >
               <div style={{ ...s.rankPill, color, borderColor: `${color}55` }}>{i + 1}</div>
               <img

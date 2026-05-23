@@ -106,6 +106,36 @@ def _run_migrations():
             PRIMARY KEY (guild_id, user_id)
         )
     """)
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS achievements (
+            achievement_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            slug           TEXT UNIQUE,
+            title          TEXT,
+            description    TEXT
+        )
+    """)
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS user_achievements (
+            user_id        INTEGER,
+            achievement_id INTEGER,
+            date_earned    TEXT DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (user_id, achievement_id)
+        )
+    """)
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS battle_history (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            p1_id       INTEGER,
+            p2_id       INTEGER,
+            p1_name     TEXT,
+            p2_name     TEXT,
+            p1_score    INTEGER,
+            p2_score    INTEGER,
+            winner_id   INTEGER,
+            mode        TEXT DEFAULT 'deck',
+            played_at   TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
     db.commit()
     migrations = [
         ("players",         "avatar",   "TEXT"),
@@ -123,6 +153,9 @@ def _run_migrations():
         ("cards",   "total_battles_won",   "INTEGER DEFAULT 0"),
         ("cards",   "total_rounds_played", "INTEGER DEFAULT 0"),
         ("cards",   "total_rounds_won",    "INTEGER DEFAULT 0"),
+        ("players",      "hide_battle_history", "INTEGER DEFAULT 0"),
+        ("players",      "hide_collection",     "INTEGER DEFAULT 0"),
+        ("achievements", "slug",               "TEXT"),
     ]
     for table, col, typedef in migrations:
         try:
@@ -132,6 +165,8 @@ def _run_migrations():
     db.commit()
 
 _run_migrations()
+from routes.profile import seed_achievements as _seed_achievements
+_seed_achievements(get_db())
 
 app.include_router(auth_router, prefix="/api")
 app.include_router(collection_router, prefix="/api")

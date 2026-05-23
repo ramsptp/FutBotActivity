@@ -59,7 +59,8 @@ async def list_requests(discord_user=Depends(get_current_user)):
     db = get_db()
 
     incoming = db.execute("""
-        SELECT fr.request_id, fr.requester_id, fr.requested_at, p.name, p.avatar
+        SELECT fr.request_id, fr.requester_id, fr.requested_at, p.name, p.avatar,
+               p.battles_won, p.coins
         FROM friend_requests fr
         LEFT JOIN players p ON fr.requester_id = p.user_id
         WHERE fr.recipient_id = ?
@@ -81,6 +82,8 @@ async def list_requests(discord_user=Depends(get_current_user)):
                 "user_id":      str(r["requester_id"]),
                 "name":         r["name"] or f"Player {r['requester_id']}",
                 "avatar":       r["avatar"],
+                "battles_won":  r["battles_won"] or 0,
+                "coins":        r["coins"] or 0,
                 "requested_at": r["requested_at"],
             }
             for r in incoming

@@ -29,7 +29,7 @@ function glowToDropShadow(glow) {
 }
 
 // viewUser = { user_id, name, avatar } — if set, viewing someone else's profile (read-only)
-export default function ProfileModal({ user, token, onClose, onTitleChange, viewUser = null, onTrade = null }) {
+export default function ProfileModal({ user, token, onClose, onTitleChange, viewUser = null, onTrade = null, onViewFull = null }) {
   const [data, setData]             = useState(null)
   const [saving, setSaving]         = useState(false)
   const [saved, setSaved]           = useState(false)
@@ -87,6 +87,11 @@ export default function ProfileModal({ user, token, onClose, onTitleChange, view
               <button onClick={() => { onTrade(viewUser.user_id); onClose() }}
                 style={{ background: 'linear-gradient(135deg,#7c3aed,#a855f7)', border: 'none', borderRadius: 10, color: '#fff', padding: '7px 16px', fontSize: 13, fontWeight: 800, cursor: 'pointer', marginRight: 8, whiteSpace: 'nowrap' }}>
                 🤝 Trade
+              </button>
+            )}
+            {onViewFull && (
+              <button onClick={onViewFull} style={{ background: 'rgba(168,85,247,0.12)', border: '1px solid rgba(168,85,247,0.3)', borderRadius: 8, color: '#a855f7', padding: '5px 10px', fontSize: 10, fontWeight: 800, cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: MONTSERRAT, letterSpacing: '0.06em' }}>
+                FULL PROFILE
               </button>
             )}
             <button onClick={onClose} style={s.closeBtn}>✕</button>
