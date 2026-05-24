@@ -38,19 +38,27 @@ export default function DeckBuilder({ token, tutorialStep = 0, onTutorialAdvance
   function openNew()    { setActiveDeck({ deck_name: '', cards: [] }); setDeckName(''); setView('editor') }
   function openEdit(d)  { setActiveDeck({ ...d }); setDeckName(d.deck_name); setView('editor') }
 
+  const deckCardKey = c => `${c.card_id}:${c.edition ?? 'x'}`
+
   function addCard(card) {
     if (activeDeck.cards.length >= DECK_SIZE) return
+    // Prevent same card_id regardless of edition (one player per deck)
     if (activeDeck.cards.find(c => c.card_id === card.card_id)) return
     setActiveDeck(d => ({ ...d, cards: [...d.cards, card] }))
   }
-  function removeCard(id) { setActiveDeck(d => ({ ...d, cards: d.cards.filter(c => c.card_id !== id) })) }
+  function removeCard(card) {
+    setActiveDeck(d => ({ ...d, cards: d.cards.filter(c => deckCardKey(c) !== deckCardKey(card)) }))
+  }
 
   async function saveDeck() {
     if (!deckName.trim()) return setError('Enter a deck name')
     if (activeDeck.cards.length !== DECK_SIZE) return setError(`Pick exactly ${DECK_SIZE} cards`)
     setSaving(true); setError(null)
     try {
-      const body = { deck_name: deckName.trim(), card_ids: activeDeck.cards.map(c => c.card_id) }
+      const body = {
+        deck_name: deckName.trim(),
+        cards: activeDeck.cards.map(c => ({ card_id: c.card_id, edition: c.edition ?? null })),
+      }
       const isEdit = decks.find(d => d.deck_name === activeDeck.deck_name)
       if (isEdit) await apiFetch(`/api/decks/${activeDeck.deck_name}`, token, { method: 'PUT',  body: JSON.stringify(body) })
       else        await apiFetch('/api/decks',                          token, { method: 'POST', body: JSON.stringify(body) })
@@ -90,8 +98,13 @@ export default function DeckBuilder({ token, tutorialStep = 0, onTutorialAdvance
           {/* Mini card strip */}
           <div style={{ display: 'flex', gap: 3 }}>
             {deck.cards.slice(0, 5).map((c, i) => (
-              <div key={i} style={{ width: 28, borderRadius: 4, overflow: 'hidden' }}>
+              <div key={i} style={{ width: 28, borderRadius: 4, overflow: 'hidden', position: 'relative' }}>
                 <FutCard card={c} />
+                {c.edition != null && (
+                  <div style={{ position: 'absolute', bottom: 1, right: 1, background: 'rgba(0,0,0,0.8)', borderRadius: 2, padding: '1px 3px', fontSize: 7, fontWeight: 700, color: '#fff', zIndex: 2, lineHeight: 1.2 }}>
+                    #{c.edition + 1}
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -115,18 +128,27 @@ export default function DeckBuilder({ token, tutorialStep = 0, onTutorialAdvance
           {Array.from({ length: DECK_SIZE }).map((_, i) => {
             const card = inDeck[i]
             return (
-              <div key={i} onClick={() => card && removeCard(card.card_id)} style={{
+              <div key={i} onClick={() => card && removeCard(card)} style={{
                 width: 125, flexShrink: 0, borderRadius: 8, overflow: 'hidden',
                 cursor: card ? 'pointer' : 'default',
                 border: `2px dashed ${card ? 'var(--accent)' : 'rgba(255,255,255,0.1)'}`,
                 aspectRatio: '300 / 420',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 background: 'rgba(255,255,255,0.02)',
+                position: 'relative',
               }}>
-                {card
-                  ? <img src={card.image_url} alt={card.name} style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'top', display: 'block' }} />
-                  : <span style={{ color: 'rgba(255,255,255,0.15)', fontSize: 22 }}>+</span>
-                }
+                {card ? (
+                  <>
+                    <img src={card.image_url} alt={card.name} style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'top', display: 'block' }} />
+                    {card.edition != null && (
+                      <div style={{ position: 'absolute', bottom: 4, right: 4, background: 'rgba(0,0,0,0.75)', borderRadius: 4, padding: '2px 5px', fontSize: 9, fontWeight: 700, color: '#fff', lineHeight: 1.3, zIndex: 2 }}>
+                        #{card.edition + 1}
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <span style={{ color: 'rgba(255,255,255,0.15)', fontSize: 22 }}>+</span>
+                )}
               </div>
             )
           })}

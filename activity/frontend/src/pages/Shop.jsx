@@ -101,7 +101,7 @@ export default function Shop({ token }) {
       {tab === 'Daily'      && <DailyTab token={token} onCoinsUpdate={c => setCoins(c)} showToast={showToast} />}
       {tab === 'Trade Up'   && <TradeUpTab token={token} showToast={showToast} />}
       {tab === 'Buy Packs'  && <BuyPacksTab packs={packs} coins={coins} onBuy={buyPack} loading={loading} />}
-      {tab === 'Sell Cards' && <SellCardsTab collection={collection} onBatchSell={batchSell} />}
+      {tab === 'Sell Cards' && <SellCardsTab collection={collection} onBatchSell={batchSell} token={token} />}
     </div>
   )
 }
@@ -686,28 +686,101 @@ function BuyPacksTab({ packs, coins, onBuy, loading }) {
 
 // ── SELL CARDS TAB ────────────────────────────────────────────────────────────
 
-function SellCardsTab({ collection, onBatchSell }) {
-  const [selected, setSelected] = useState([]) // array of card objects
+function SellCardsTab({ collection, onBatchSell, token }) {
+  const [selected, setSelected]     = useState([])
   const [confirming, setConfirming] = useState(false)
+  const [deckCardIds, setDeckCardIds] = useState(new Set())
+  const [dupeOnly, setDupeOnly]     = useState(false)
+  const containerRef = useRef(null)
+
+  useEffect(() => {
+    const page = containerRef.current?.closest?.('.page')
+    if (page) page.scrollTop = 0
+  }, [dupeOnly])
+
+  useEffect(() => {
+    apiFetch('/api/decks', token).then(decks => {
+      const ids = new Set()
+      decks.forEach(deck => deck.cards.forEach(card => {
+        ids.add(card.edition != null ? `${card.card_id}:${card.edition}` : `${card.card_id}:*`)
+      }))
+      setDeckCardIds(ids)
+    }).catch(() => {})
+  }, [])
+
+  const cardKey = c => `${c.card_id}-${c.edition ?? 'null'}`
 
   const toggle = card => {
-    const key = `${card.card_id}-${card.edition ?? 'null'}`
-    if (selected.some(c => `${c.card_id}-${c.edition ?? 'null'}` === key)) {
-      setSelected(s => s.filter(c => `${c.card_id}-${c.edition ?? 'null'}` !== key))
+    const key = cardKey(card)
+    if (selected.some(c => cardKey(c) === key)) {
+      setSelected(s => s.filter(c => cardKey(c) !== key))
     } else {
       setSelected(s => [...s, card])
     }
   }
 
+  // Build duplicate list: for each card_id group, exclude the lowest edition (original)
+  const dupeCards = (() => {
+    const groups = {}
+    collection.forEach(c => { (groups[c.card_id] = groups[c.card_id] || []).push(c) })
+    const extras = []
+    Object.values(groups).forEach(group => {
+      if (group.length < 2) return
+      const sorted = [...group].sort((a, b) => (a.edition ?? 0) - (b.edition ?? 0))
+      extras.push(...sorted.slice(1))
+    })
+    return extras
+  })()
+
+  const displayCards = dupeOnly ? dupeCards : [...collection].sort((a, b) => (b.overall || 0) - (a.overall || 0))
+  const dupeCount = dupeCards.length
+
   const totalValue = selected.reduce((sum, c) => sum + calcValue(c), 0)
-  const isSelected = card => selected.some(c => `${c.card_id}-${c.edition ?? 'null'}` === `${card.card_id}-${card.edition ?? 'null'}`)
+  const isSelected = card => selected.some(c => cardKey(c) === cardKey(card))
+
+  function selectAllDupes() {
+    setSelected(dupeCards)
+  }
 
   if (collection.length === 0) return (
     <p style={{ color: 'var(--muted)', textAlign: 'center', paddingTop: 40 }}>No cards to sell.</p>
   )
 
   return (
-    <>
+    <div ref={containerRef}>
+      {/* Header row */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+        <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', letterSpacing: 2, textTransform: 'uppercase' }}>
+          {dupeOnly ? `${dupeCount} duplicate${dupeCount !== 1 ? 's' : ''}` : `${collection.length} cards`}
+        </div>
+        {dupeCount > 0 && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            {dupeOnly && dupeCount > 0 && selected.length < dupeCount && (
+              <button onClick={selectAllDupes} style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 20, padding: '5px 10px', cursor: 'pointer', fontSize: 10, fontWeight: 700, color: '#ef4444' }}>
+                Select All
+              </button>
+            )}
+            <button onClick={() => { setDupeOnly(d => !d); setSelected([]) }} style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              background: dupeOnly ? 'rgba(240,192,64,0.12)' : 'rgba(255,255,255,0.04)',
+              border: `1px solid ${dupeOnly ? 'rgba(240,192,64,0.5)' : 'rgba(255,255,255,0.1)'}`,
+              borderRadius: 20, padding: '5px 12px', cursor: 'pointer',
+              fontSize: 11, fontWeight: 700,
+              color: dupeOnly ? '#f0c040' : 'rgba(255,255,255,0.4)',
+              transition: 'all 0.15s',
+            }}>
+              <span style={{ fontSize: 10 }}>⚡</span>
+              Dupes only
+              <span style={{
+                background: dupeOnly ? '#f0c040' : 'rgba(255,255,255,0.12)',
+                color: dupeOnly ? '#000' : 'rgba(255,255,255,0.5)',
+                borderRadius: 10, padding: '1px 6px', fontSize: 9, fontWeight: 800,
+              }}>{dupeCount}</span>
+            </button>
+          </div>
+        )}
+      </div>
+
       {selected.length > 0 && (
         <div style={{ position: 'sticky', top: 0, zIndex: 20, marginBottom: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#0a0f1e', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 12, padding: '10px 14px', boxShadow: '0 4px 16px rgba(0,0,0,0.6)' }}>
           <div>
@@ -721,28 +794,38 @@ function SellCardsTab({ collection, onBatchSell }) {
         </div>
       )}
 
+      {dupeOnly && dupeCards.length === 0 ? (
+        <div style={{ textAlign: 'center', paddingTop: 50 }}>
+          <div style={{ fontSize: 36, marginBottom: 10, opacity: 0.4 }}>✨</div>
+          <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.35)', fontWeight: 600 }}>No duplicate cards</div>
+        </div>
+      ) : (
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))', gap: 10, paddingBottom: 20 }}>
-        {collection.map((card, i) => {
+        {displayCards.map((card, i) => {
           const sel = isSelected(card)
           const value = calcValue(card)
+          const inDeck = deckCardIds.has(card.edition != null ? `${card.card_id}:${card.edition}` : `${card.card_id}:*`) || deckCardIds.has(`${card.card_id}:*`)
           return (
             <div key={`${card.card_id}-${card.edition ?? i}`} onClick={() => toggle(card)} style={{ cursor: 'pointer' }}>
               <div style={{ position: 'relative', borderRadius: 10, overflow: 'hidden', border: `2px solid ${sel ? '#ef4444' : 'transparent'}`, transition: 'border-color 0.15s' }}>
                 <FutCard card={card} />
                 {/* Edition badge — top right */}
-                <div style={{ position: 'absolute', top: 4, right: 4, background: 'rgba(0,0,0,0.72)', backdropFilter: 'blur(4px)', borderRadius: 6, padding: '2px 5px', fontSize: 9, fontWeight: 700, color: '#fff', letterSpacing: 0.5, lineHeight: 1.4 }}>
+                <div style={{ position: 'absolute', top: 4, right: 4, zIndex: 2, background: 'rgba(0,0,0,0.72)', backdropFilter: 'blur(4px)', borderRadius: 6, padding: '2px 5px', fontSize: 9, fontWeight: 700, color: '#fff', letterSpacing: 0.5, lineHeight: 1.4 }}>
                   {card.edition != null ? `#${card.edition}` : '—'}<span style={{ color: 'rgba(255,255,255,0.4)', fontWeight: 400 }}>/{card.copies ?? '?'}</span>
                 </div>
-                {/* Selected checkmark — top left */}
-                {sel && (
-                  <div style={{ position: 'absolute', top: 4, left: 4, background: '#ef4444', borderRadius: '50%', width: 18, height: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 900, color: '#fff' }}>✓</div>
-                )}
+                {/* Selected checkmark or DECK badge — top left */}
+                {sel ? (
+                  <div style={{ position: 'absolute', top: 4, left: 4, zIndex: 2, background: '#ef4444', borderRadius: '50%', width: 18, height: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 900, color: '#fff' }}>✓</div>
+                ) : inDeck ? (
+                  <div style={{ position: 'absolute', top: 4, left: 4, zIndex: 2, background: 'rgba(168,85,247,0.9)', borderRadius: 4, padding: '2px 5px', fontSize: 8, fontWeight: 800, color: '#fff', letterSpacing: 0.5, lineHeight: 1.3 }}>DECK</div>
+                ) : null}
               </div>
               <div style={{ textAlign: 'center', marginTop: 3, fontSize: 11, color: sel ? 'var(--gold)' : 'var(--muted)', fontWeight: sel ? 700 : 400 }}>🪙 {value}</div>
             </div>
           )
         })}
       </div>
+      )}
 
       {confirming && (
         <div onClick={() => setConfirming(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.82)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', zIndex: 100 }}>
@@ -774,7 +857,7 @@ function SellCardsTab({ collection, onBatchSell }) {
           </div>
         </div>
       )}
-    </>
+    </div>
   )
 }
 

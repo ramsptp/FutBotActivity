@@ -44,6 +44,7 @@ export default function Battle({ token, participants = [], incomingChallenge, se
   const [round, setRound]     = useState(null)
   const [hand, setHand]       = useState([])
   const [score, setScore]     = useState({ you: 0, opponent: 0 })
+  const [roundHistory, setRoundHistory] = useState([])
   const [opponentName, setOpponentName] = useState('')
   const [opponentCardCount, setOpponentCardCount] = useState(0)
   const [myStat, setMyStat]   = useState(null)
@@ -53,6 +54,7 @@ export default function Battle({ token, participants = [], incomingChallenge, se
   const [roundResult, setRoundResult] = useState(null)
   const [gameResult, setGameResult]   = useState(null)
   const [showVS, setShowVS]   = useState(false)
+  const [clashPhase, setClashPhase] = useState('entering') // entering | clash | result
   const [opponentDeckReady, setOpponentDeckReady] = useState(false)
   const [opponentNameForDeck, setOpponentNameForDeck] = useState('')
 
@@ -74,8 +76,10 @@ export default function Battle({ token, participants = [], incomingChallenge, se
       switch (msg.type) {
         case 'draft_round_start':
           setDraftRound(msg.round); setDraftCards(msg.cards)
+          if (msg.round === 1) { setDraftMyDeck([]); setDraftOppDeck([]) }
           setDraftClaimed({}); setDraftMyPick(null); setDraftResult(null)
           setDraftPhase('reveal'); setScreen('draft')
+          preloadImages(msg.cards.map(c => c.image_url).filter(Boolean))
           setTimeout(() => setDraftPhase('pick'), 6500)
           break
 
@@ -109,6 +113,7 @@ export default function Battle({ token, participants = [], incomingChallenge, se
 
         case 'round_start':
           preloadImages(msg.your_hand.map(c => c.image_url))
+          if (msg.round === 1) setRoundHistory([])
           setPicksStatThisRound(msg.picks_stat)
           setRound(msg.round)
           setHand(msg.your_hand)
@@ -136,7 +141,14 @@ export default function Battle({ token, participants = [], incomingChallenge, se
 
         case 'round_result':
           preloadImages([msg.your_card?.image_url, msg.opponent_card?.image_url])
-          setRoundResult(msg); setScore(msg.score); setScreen('round_result'); if(msg.round_winner==='you') sfx.roundWin(); else if(msg.round_winner==='opponent') sfx.roundLose(); break
+          setRoundResult(msg); setScore(msg.score)
+          setRoundHistory(h => [...h, msg.round_winner])
+          setClashPhase('entering')
+          setTimeout(() => setClashPhase('clash'), 450)
+          setTimeout(() => setClashPhase('result'), 800)
+          setScreen('round_result')
+          if(msg.round_winner==='you') sfx.roundWin(); else if(msg.round_winner==='opponent') sfx.roundLose()
+          break
 
         case 'game_over':
           setGameResult(msg)
@@ -248,7 +260,7 @@ export default function Battle({ token, participants = [], incomingChallenge, se
     wsRef.current?.close(); wsRef.current = null
     setScreen('lobby'); setRoundResult(null); setGameResult(null)
     setPickedCard(null); setMyStat(null); setOppStat(null)
-    setScore({ you: 0, opponent: 0 }); setRound(null)
+    setScore({ you: 0, opponent: 0 }); setRound(null); setRoundHistory([])
     setRematchRequested(false); setOpponentRequestedRematch(false); setError(null)
     setDraftRound(0); setDraftCards([]); setDraftClaimed({}); setDraftMyPick(null)
     setDraftResult(null); setDraftMyDeck([]); setDraftOppDeck([]); setDraftComplete(null)
@@ -456,8 +468,17 @@ export default function Battle({ token, participants = [], incomingChallenge, se
           <div style={L.deckLabel}>CHOOSE YOUR LINEUP</div>
           <select value={selectedDeck} onChange={e => setSelectedDeck(e.target.value)} className="deck-select" style={L.deckSelect}>
             <option value="">— select a deck —</option>
-            {decks.map(d => <option key={d.deck_name} value={d.deck_name}>{d.deck_name}</option>)}
+            {decks.map(d => (
+              <option key={d.deck_name} value={d.deck_name} disabled={!d.complete}>
+                {d.deck_name}{!d.complete ? ' (incomplete)' : ''}
+              </option>
+            ))}
           </select>
+          {decks.some(d => !d.complete) && (
+            <div style={{ fontSize: 11, color: '#ef4444', marginTop: 6 }}>
+              ⚠ Incomplete decks contain cards you no longer own and cannot be used.
+            </div>
+          )}
         </div>
         {error && <div style={L.error}>{error}</div>}
         <button onClick={sendReady} style={L.goldBtn}>⚔ READY FOR BATTLE</button>
@@ -669,24 +690,38 @@ export default function Battle({ token, participants = [], incomingChallenge, se
   if (screen === 'stat_selection') return (
     <div className="page">
       {howToPlayModal}
-      <BattleBar round={round} score={score} opponent={opponentName} onSurrender={{ start: surrender, confirm: surrender, cancel: () => setSurrenderConfirm(false), confirming: surrenderConfirm }} onHowToPlay={() => setShowHowToPlay(true)} />
-      <div style={{ color: 'var(--muted)', fontSize: 13, marginBottom: 12, textAlign: 'center' }}>
-        Round {round} — choose your stat
+      <BattleBar round={round} score={score} opponent={opponentName} onSurrender={{ start: surrender, confirm: surrender, cancel: () => setSurrenderConfirm(false), confirming: surrenderConfirm }} onHowToPlay={() => setShowHowToPlay(true)} roundHistory={roundHistory} />
+      <div style={{ color: 'var(--muted)', fontSize: 13, marginBottom: 16, textAlign: 'center', fontWeight: 600 }}>
+        Choose the battle stat for Round {round}
       </div>
-      <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-        {['attack','defense','speed'].map(stat => (
-          <button key={stat} onClick={() => chooseStat(stat)} style={{
-            flex: 1, background: 'var(--surface)', border: `2px solid ${STAT_COLOR[stat]}`,
-            borderRadius: 14, padding: '12px 8px', cursor: 'pointer', textAlign: 'center',
-            transition: 'transform 0.15s',
-          }}>
-            <div style={{ fontSize: 20, marginBottom: 4 }}>{STAT_ICON[stat]}</div>
-            <div style={{ fontSize: 14, fontWeight: 700, color: STAT_COLOR[stat] }}>{STAT_LABEL[stat]}</div>
-            <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 3 }}>counters: {COUNTER_OF[stat]}</div>
-          </button>
-        ))}
+      <div style={{ display: 'flex', gap: 10, marginBottom: 20 }}>
+        {['attack','defense','speed'].map(stat => {
+          const best = hand.length ? Math.max(...hand.map(c => c[stat] || 0)) : 0
+          return (
+            <button key={stat} onClick={() => chooseStat(stat)} style={{
+              flex: 1, background: 'rgba(255,255,255,0.03)',
+              border: `2px solid ${STAT_COLOR[stat]}33`,
+              borderRadius: 16, padding: '14px 6px', cursor: 'pointer', textAlign: 'center',
+              transition: 'all 0.15s',
+            }}
+            onMouseEnter={e => { e.currentTarget.style.background = `${STAT_COLOR[stat]}14`; e.currentTarget.style.borderColor = STAT_COLOR[stat]; e.currentTarget.style.transform = 'translateY(-3px)' }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.03)'; e.currentTarget.style.borderColor = `${STAT_COLOR[stat]}33`; e.currentTarget.style.transform = '' }}
+            >
+              <div style={{ fontSize: 24, marginBottom: 6 }}>{STAT_ICON[stat]}</div>
+              <div style={{ fontSize: 14, fontWeight: 800, color: STAT_COLOR[stat], fontFamily: "'Montserrat',sans-serif" }}>{STAT_LABEL[stat]}</div>
+              <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 2, marginBottom: 10 }}>beats {COUNTER_OF[stat]}</div>
+              <div style={{
+                background: `${STAT_COLOR[stat]}14`, border: `1px solid ${STAT_COLOR[stat]}33`,
+                borderRadius: 8, padding: '6px 4px',
+              }}>
+                <div style={{ fontSize: 22, fontWeight: 900, color: STAT_COLOR[stat], lineHeight: 1 }}>{best}</div>
+                <div style={{ fontSize: 9, color: 'var(--muted)', marginTop: 2, letterSpacing: 1 }}>YOUR BEST</div>
+              </div>
+            </button>
+          )
+        })}
       </div>
-      <div style={{ color: 'var(--muted)', fontSize: 12, marginBottom: 8 }}>Your hand</div>
+      <div style={{ fontSize: 10, color: '#334155', letterSpacing: 2, marginBottom: 10, fontWeight: 700 }}>YOUR HAND</div>
       <HandGrid hand={hand} stat={null} disabled />
     </div>
   )
@@ -695,7 +730,7 @@ export default function Battle({ token, participants = [], incomingChallenge, se
   if (screen === 'waiting_for_stat') return (
     <div className="page">
       {howToPlayModal}
-      <BattleBar round={round} score={score} opponent={opponentName} onSurrender={{ start: surrender, confirm: surrender, cancel: () => setSurrenderConfirm(false), confirming: surrenderConfirm }} onHowToPlay={() => setShowHowToPlay(true)} />
+      <BattleBar round={round} score={score} opponent={opponentName} onSurrender={{ start: surrender, confirm: surrender, cancel: () => setSurrenderConfirm(false), confirming: surrenderConfirm }} onHowToPlay={() => setShowHowToPlay(true)} roundHistory={roundHistory} />
       <div style={{ textAlign: 'center', color: 'var(--muted)', fontSize: 14, marginBottom: 20, padding: '12px', background: 'var(--surface)', borderRadius: 10, border: '1px solid var(--border)' }}>
         ⏳ {opponentName} is choosing their stat…
       </div>
@@ -707,108 +742,244 @@ export default function Battle({ token, participants = [], incomingChallenge, se
   if (screen === 'picking') return (
     <div className="page">
       {howToPlayModal}
-      <BattleBar round={round} score={score} opponent={opponentName} onSurrender={{ start: surrender, confirm: surrender, cancel: () => setSurrenderConfirm(false), confirming: surrenderConfirm }} onHowToPlay={() => setShowHowToPlay(true)} />
+      <BattleBar round={round} score={score} opponent={opponentName} onSurrender={{ start: surrender, confirm: surrender, cancel: () => setSurrenderConfirm(false), confirming: surrenderConfirm }} onHowToPlay={() => setShowHowToPlay(true)} roundHistory={roundHistory} />
 
       {/* Active stat display */}
-      <div style={{ textAlign: 'center', marginBottom: 16 }}>
+      <div style={{ textAlign: 'center', marginBottom: 14 }}>
         <div style={{ display: 'inline-flex', gap: 10, background: 'var(--surface)', borderRadius: 40, padding: '8px 16px', border: '1px solid var(--border)' }}>
-          <span style={{ color: STAT_COLOR[myStat], fontWeight: 700, fontSize: 15 }}>{STAT_ICON[myStat]} Your {STAT_LABEL[myStat]}</span>
+          <span style={{ color: STAT_COLOR[myStat], fontWeight: 700, fontSize: 14 }}>{STAT_ICON[myStat]} Your {STAT_LABEL[myStat]}</span>
           <span style={{ color: 'var(--muted)' }}>vs</span>
-          <span style={{ color: STAT_COLOR[oppStat], fontWeight: 700, fontSize: 15 }}>{STAT_ICON[oppStat]} Their {STAT_LABEL[oppStat]}</span>
+          <span style={{ color: STAT_COLOR[oppStat], fontWeight: 700, fontSize: 14 }}>{STAT_ICON[oppStat]} Their {STAT_LABEL[oppStat]}</span>
         </div>
       </div>
 
-      {opponentPicked && !pickedCard && (
-        <div style={{ background: 'rgba(34,197,94,0.1)', border: '1px solid var(--green)', borderRadius: 8, padding: '8px 12px', marginBottom: 12, fontSize: 13, color: 'var(--green)', textAlign: 'center' }}>
-          {opponentName} has picked — your turn!
+      {/* Opponent face-down hand */}
+      <div style={{ marginBottom: 16 }}>
+        <div style={{ fontSize: 10, color: '#334155', letterSpacing: 2, marginBottom: 8, textAlign: 'center', fontWeight: 700 }}>
+          {opponentName.toUpperCase()}'S HAND
         </div>
+        <div style={{ display: 'flex', gap: 6, justifyContent: 'center' }}>
+          {Array.from({ length: opponentCardCount }, (_, i) => {
+            const isChosen = opponentPicked && i === 0
+            return (
+              <div key={i} style={{
+                width: 58, aspectRatio: '3/4', borderRadius: 8, flexShrink: 0,
+                background: 'linear-gradient(145deg, #0d1a2e 0%, #162035 50%, #0d1a2e 100%)',
+                border: `1.5px solid ${isChosen ? 'rgba(168,85,247,0.7)' : 'rgba(255,255,255,0.07)'}`,
+                boxShadow: isChosen ? '0 0 14px rgba(168,85,247,0.45)' : 'none',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                transition: 'all 0.35s',
+                position: 'relative', overflow: 'hidden',
+              }}>
+                <div style={{
+                  position: 'absolute', inset: 0,
+                  backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 6px, rgba(255,255,255,0.015) 6px, rgba(255,255,255,0.015) 7px)',
+                }} />
+                <span style={{ fontSize: 18, opacity: isChosen ? 0.8 : 0.25, transition: 'opacity 0.3s' }}>⚽</span>
+              </div>
+            )
+          })}
+        </div>
+        {opponentPicked && (
+          <div style={{ textAlign: 'center', marginTop: 7, fontSize: 12, color: '#a855f7', fontWeight: 700 }}>
+            ✓ {opponentName} has played a card!
+          </div>
+        )}
+      </div>
+
+      {/* Divider */}
+      <div style={{ height: 1, background: 'linear-gradient(to right, transparent, rgba(255,255,255,0.07), transparent)', marginBottom: 14 }} />
+
+      {!pickedCard && (
+        <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 10, textAlign: 'center' }}>Tap a card to play it</div>
       )}
       {pickedCard && (
         <div style={{ background: 'rgba(88,101,242,0.1)', border: '1px solid var(--accent)', borderRadius: 8, padding: '8px 12px', marginBottom: 12, fontSize: 13, color: 'var(--accent)', textAlign: 'center' }}>
-          Waiting for {opponentName}…
+          ✓ Card played — Waiting for {opponentName}…
         </div>
       )}
 
-      <div style={{ color: 'var(--muted)', fontSize: 12, marginBottom: 10 }}>Tap a card to play it</div>
       <HandGrid hand={hand} stat={myStat} pickedId={pickedCard?.card_id} onPick={pickCard} />
     </div>
   )
 
-  /* ── ROUND RESULT (cinematic) ── */
+  /* ── ROUND RESULT (cinematic clash) ── */
   if (screen === 'round_result' && roundResult) {
     const won  = roundResult.round_winner === 'you'
     const lost = roundResult.round_winner === 'opponent'
+    const yourVal = roundResult.your_card[roundResult.your_stat]
+    const oppVal  = roundResult.opponent_card[roundResult.opponent_stat]
+    const maxVal  = Math.max(yourVal, oppVal, 1)
+    const resultColor = won ? '#22c55e' : lost ? '#ef4444' : '#f0c040'
     return (
-      <div className="page">
-        <BattleBar round={`${roundResult.round} Result`} score={roundResult.score} opponent={opponentName} />
+      <div className="page" style={{ overflow: 'hidden', position: 'relative' }}>
+        <style>{`
+          @keyframes clashFromLeft  { 0%{transform:translateX(-110%) scale(0.82);opacity:0} 65%{transform:translateX(6%) scale(1.05);opacity:1} 100%{transform:none;opacity:1} }
+          @keyframes clashFromRight { 0%{transform:translateX(110%) scale(0.82);opacity:0} 65%{transform:translateX(-6%) scale(1.05);opacity:1} 100%{transform:none;opacity:1} }
+          @keyframes impactBurst { 0%{opacity:0;transform:scale(0.3)} 45%{opacity:1;transform:scale(1.5)} 100%{opacity:0;transform:scale(2.5)} }
+          @keyframes statReveal { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:none} }
+          @keyframes resultIn { 0%{opacity:0;transform:scale(1.4)} 100%{opacity:1;transform:none} }
+          @keyframes barFill { from{width:0} }
+        `}</style>
 
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16, marginBottom: 14, justifyContent: 'center' }}>
+        {/* Impact flash */}
+        {clashPhase === 'clash' && (
+          <div style={{ position:'absolute',inset:0,zIndex:10,pointerEvents:'none',display:'flex',alignItems:'center',justifyContent:'center' }}>
+            <div style={{
+              width:140,height:140,borderRadius:'50%',
+              background:`radial-gradient(circle, ${resultColor}99 0%, transparent 70%)`,
+              animation:'impactBurst 0.38s ease-out forwards',
+            }} />
+          </div>
+        )}
+
+        <BattleBar round={`${roundResult.round} Result`} score={roundResult.score} opponent={opponentName} roundHistory={roundHistory} />
+
+        {/* Result label */}
+        {clashPhase === 'result' && (
+          <div style={{ textAlign:'center', marginBottom:12, animation:'resultIn 0.3s ease-out' }}>
+            <span style={{ fontSize:14, fontWeight:900, color:resultColor, letterSpacing:3, textTransform:'uppercase', fontFamily:"'Montserrat',sans-serif" }}>
+              {won ? '🏆 YOU WIN' : lost ? '💀 DEFEAT' : '🤝 DRAW'}
+            </span>
+          </div>
+        )}
+
+        <div style={{ display:'flex', alignItems:'flex-start', gap:12, justifyContent:'center', marginBottom:16 }}>
           {/* Your card */}
-          <div className="anim-slideL" style={{ width: 160, flexShrink: 0 }}>
-            <div style={{ fontSize: 11, color: 'var(--muted)', textAlign: 'center', marginBottom: 6 }}>You</div>
-            <FutCard card={roundResult.your_card} highlight={won ? 'win' : lost ? 'lose' : undefined} />
-            <div style={{ textAlign: 'center', marginTop: 6 }}>
-              <div style={{ fontSize: 20, fontWeight: 900, color: STAT_COLOR[roundResult.your_stat] }}>
-                {roundResult.your_card[roundResult.your_stat]}
+          <div style={{ width:148, flexShrink:0, animation:'clashFromLeft 0.5s cubic-bezier(0.2,0.8,0.4,1) both' }}>
+            <div style={{ fontSize:11, color:'var(--muted)', textAlign:'center', marginBottom:6 }}>You</div>
+            <FutCard card={roundResult.your_card} highlight={clashPhase==='result' ? (won?'win':lost?'lose':undefined) : undefined} />
+            {clashPhase === 'result' && (
+              <div style={{ textAlign:'center', marginTop:8, animation:'statReveal 0.3s ease 0.1s both' }}>
+                <div style={{ fontSize:22, fontWeight:900, color:STAT_COLOR[roundResult.your_stat] }}>{yourVal}</div>
+                <div style={{ fontSize:10, color:'var(--muted)' }}>{STAT_ICON[roundResult.your_stat]} {STAT_LABEL[roundResult.your_stat]}</div>
+                <div style={{ height:4, background:'rgba(255,255,255,0.08)', borderRadius:2, marginTop:7, overflow:'hidden' }}>
+                  <div style={{ height:'100%', borderRadius:2, background:won?'#22c55e':lost?'#ef4444':'#f0c040', width:`${(yourVal/maxVal)*100}%`, animation:'barFill 0.5s ease 0.25s both' }} />
+                </div>
               </div>
-              <div style={{ fontSize: 11, color: 'var(--muted)' }}>{STAT_ICON[roundResult.your_stat]} {STAT_LABEL[roundResult.your_stat]}</div>
-            </div>
+            )}
           </div>
 
-          {/* Middle */}
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', paddingTop: 60, gap: 6, flexShrink: 0 }}>
-            <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--muted)' }}>VS</div>
-            <div style={{ fontSize: 12, fontWeight: 700, color: won ? 'var(--green)' : lost ? 'var(--red)' : 'var(--gold)', textAlign: 'center' }}>
-              {won ? '🏆 Win' : lost ? '💀 Loss' : '🤝 Draw'}
-            </div>
+          {/* VS */}
+          <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', paddingTop:55, flexShrink:0, minWidth:36 }}>
+            <div style={{ fontSize:12, fontWeight:800, color:clashPhase==='result'?resultColor:'var(--muted)', transition:'color 0.4s', fontFamily:"'Montserrat',sans-serif" }}>VS</div>
           </div>
 
           {/* Opponent card */}
-          <div className="anim-slideR" style={{ width: 160, flexShrink: 0 }}>
-            <div style={{ fontSize: 11, color: 'var(--muted)', textAlign: 'center', marginBottom: 6 }}>{opponentName}</div>
-            <FutCard card={roundResult.opponent_card} highlight={lost ? 'win' : won ? 'lose' : undefined} />
-            <div style={{ textAlign: 'center', marginTop: 6 }}>
-              <div style={{ fontSize: 20, fontWeight: 900, color: STAT_COLOR[roundResult.opponent_stat] }}>
-                {roundResult.opponent_card[roundResult.opponent_stat]}
+          <div style={{ width:148, flexShrink:0, animation:'clashFromRight 0.5s cubic-bezier(0.2,0.8,0.4,1) both' }}>
+            <div style={{ fontSize:11, color:'var(--muted)', textAlign:'center', marginBottom:6 }}>{opponentName}</div>
+            <FutCard card={roundResult.opponent_card} highlight={clashPhase==='result' ? (lost?'win':won?'lose':undefined) : undefined} />
+            {clashPhase === 'result' && (
+              <div style={{ textAlign:'center', marginTop:8, animation:'statReveal 0.3s ease 0.1s both' }}>
+                <div style={{ fontSize:22, fontWeight:900, color:STAT_COLOR[roundResult.opponent_stat] }}>{oppVal}</div>
+                <div style={{ fontSize:10, color:'var(--muted)' }}>{STAT_ICON[roundResult.opponent_stat]} {STAT_LABEL[roundResult.opponent_stat]}</div>
+                <div style={{ height:4, background:'rgba(255,255,255,0.08)', borderRadius:2, marginTop:7, overflow:'hidden' }}>
+                  <div style={{ height:'100%', borderRadius:2, background:lost?'#22c55e':won?'#ef4444':'#f0c040', width:`${(oppVal/maxVal)*100}%`, animation:'barFill 0.5s ease 0.25s both' }} />
+                </div>
               </div>
-              <div style={{ fontSize: 11, color: 'var(--muted)' }}>{STAT_ICON[roundResult.opponent_stat]} {STAT_LABEL[roundResult.opponent_stat]}</div>
-            </div>
+            )}
           </div>
         </div>
 
-        <div style={{ textAlign: 'center', color: 'var(--muted)', fontSize: 12, marginTop: 8 }}>Next round starting…</div>
+        {clashPhase === 'result' && (
+          <div style={{ textAlign:'center', color:'var(--muted)', fontSize:12, animation:'statReveal 0.3s ease 0.4s both' }}>Next round starting…</div>
+        )}
       </div>
     )
   }
 
   /* ── GAME OVER ── */
-  if (screen === 'game_over' && gameResult) return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '80svh', gap: 14, padding: 24 }}>
-      <div className="anim-fadeUp" style={{ fontSize: 32, fontWeight: 900,
-        color: gameResult.winner === 'you' ? 'var(--gold)' : gameResult.winner === 'opponent' ? 'var(--red)' : 'var(--muted)' }}>
-        {gameResult.winner === 'you' ? '🏆 Victory' : gameResult.winner === 'opponent' ? '💀 Defeated' : '🤝 Draw'}
-      </div>
+  if (screen === 'game_over' && gameResult) {
+    const isWin  = gameResult.winner === 'you'
+    const isLoss = gameResult.winner === 'opponent'
+    const resultColor = isWin ? '#ffca45' : isLoss ? '#ef4444' : '#94a3b8'
+    const bgAccent = isWin ? 'rgba(255,202,69,0.06)' : isLoss ? 'rgba(239,68,68,0.05)' : 'rgba(255,255,255,0.02)'
+    return (
+      <div style={{
+        position:'fixed', inset:0,
+        background: `linear-gradient(160deg, #050914 0%, ${isWin?'#0d1a07':isLoss?'#170a0a':'#0d0d0d'} 55%, #050914 100%)`,
+        display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center',
+        gap:22, padding:'24px 24px 48px',
+      }}>
+        {isWin && <Firecrackers />}
+        <style>{`
+          @keyframes glowText { 0%,100%{text-shadow:0 0 30px currentColor} 50%{text-shadow:0 0 80px currentColor,0 0 120px currentColor} }
+          @keyframes rematchPulse { 0%,100%{box-shadow:0 4px 20px rgba(255,202,69,0.3)} 50%{box-shadow:0 4px 50px rgba(255,202,69,0.7),0 0 100px rgba(255,202,69,0.2)} }
+          @keyframes popIn { 0%{opacity:0;transform:scale(0.5)} 70%{transform:scale(1.08)} 100%{opacity:1;transform:none} }
+        `}</style>
 
-      <div className="anim-fadeUp glass" style={{ display: 'flex', alignItems: 'center', gap: 24, padding: '16px 28px', animationDelay: '0.15s' }}>
-        <ScoreBlock label="You" value={gameResult.final_score.you} />
-        <div style={{ fontSize: 24, color: 'var(--muted)', fontWeight: 300 }}>—</div>
-        <ScoreBlock label={opponentName} value={gameResult.final_score.opponent} />
-      </div>
+        {/* Result */}
+        <div className="anim-fadeUp" style={{ textAlign:'center' }}>
+          <div style={{ fontSize:68, marginBottom:8, filter:`drop-shadow(0 0 24px ${resultColor}88)`, animation:'popIn 0.5s cubic-bezier(0.34,1.56,0.64,1) both' }}>
+            {isWin ? '🏆' : isLoss ? '💀' : '🤝'}
+          </div>
+          <div style={{
+            fontSize:38, fontWeight:900, letterSpacing:'0.08em', fontFamily:"'Montserrat',sans-serif",
+            color:resultColor, animation:'glowText 2s ease infinite',
+          }}>
+            {isWin ? 'VICTORY' : isLoss ? 'DEFEATED' : 'DRAW'}
+          </div>
+          <div style={{ fontSize:13, color:'var(--muted)', marginTop:5 }}>vs {opponentName}</div>
+        </div>
 
-      {opponentRequestedRematch && !rematchRequested && (
-        <div style={{ color: 'var(--green)', fontSize: 14 }}>{opponentName} wants a rematch!</div>
-      )}
-      {rematchRequested && !opponentRequestedRematch && (
-        <div style={{ color: 'var(--muted)', fontSize: 14 }}>Waiting for {opponentName}…</div>
-      )}
-      {!rematchRequested && (
-        <button className="btn-primary" onClick={requestRematch} style={{ maxWidth: 260 }}>
-          {opponentRequestedRematch ? 'Accept Rematch' : 'Rematch'}
-        </button>
-      )}
-      <button className="btn-ghost" onClick={resetToLobby}>Back to Lobby</button>
-    </div>
-  )
+        {/* Score */}
+        <div className="anim-fadeUp" style={{
+          display:'flex', alignItems:'center', gap:32,
+          background:bgAccent, border:`1px solid ${resultColor}22`,
+          borderRadius:20, padding:'20px 40px', animationDelay:'0.15s',
+        }}>
+          <div style={{ textAlign:'center' }}>
+            <div style={{ fontSize:56, fontWeight:900, lineHeight:1, color:isWin?'#22c55e':'#fff', animation:'popIn 0.5s cubic-bezier(0.34,1.56,0.64,1) 0.2s both' }}>
+              {gameResult.final_score.you}
+            </div>
+            <div style={{ fontSize:12, color:'var(--muted)', marginTop:4 }}>You</div>
+          </div>
+          <div style={{ fontSize:22, color:'rgba(255,255,255,0.12)', fontWeight:300 }}>—</div>
+          <div style={{ textAlign:'center' }}>
+            <div style={{ fontSize:56, fontWeight:900, lineHeight:1, color:isLoss?'#22c55e':'#fff', animation:'popIn 0.5s cubic-bezier(0.34,1.56,0.64,1) 0.3s both' }}>
+              {gameResult.final_score.opponent}
+            </div>
+            <div style={{ fontSize:12, color:'var(--muted)', marginTop:4 }}>{opponentName}</div>
+          </div>
+        </div>
+
+        {/* Rematch */}
+        <div className="anim-fadeUp" style={{ width:'100%', maxWidth:300, display:'flex', flexDirection:'column', gap:10, animationDelay:'0.25s' }}>
+          {opponentRequestedRematch && !rematchRequested && (
+            <div style={{ textAlign:'center', fontSize:13, color:'#4ade80', fontWeight:700, background:'rgba(34,197,94,0.1)', border:'1px solid rgba(34,197,94,0.3)', borderRadius:10, padding:'8px' }}>
+              ⚡ {opponentName} wants a rematch!
+            </div>
+          )}
+          {rematchRequested && !opponentRequestedRematch && (
+            <div style={{ textAlign:'center', fontSize:13, color:'var(--muted)' }}>Waiting for {opponentName}…</div>
+          )}
+          {!rematchRequested && (
+            <button onClick={requestRematch} style={{
+              width:'100%', padding:'15px 0',
+              background:'linear-gradient(135deg, #d97706, #ffca45)',
+              border:'none', borderRadius:14, color:'#0a0500',
+              fontFamily:"'Montserrat',sans-serif", fontWeight:900, fontSize:16,
+              cursor:'pointer', letterSpacing:'0.1em', textTransform:'uppercase',
+              animation:'rematchPulse 1.6s ease infinite',
+            }}
+            onMouseEnter={e => e.currentTarget.style.transform='scale(1.03)'}
+            onMouseLeave={e => e.currentTarget.style.transform=''}
+            >
+              ⚡ {opponentRequestedRematch ? 'ACCEPT REMATCH' : 'REMATCH'}
+            </button>
+          )}
+          <button onClick={resetToLobby} style={{
+            width:'100%', padding:'11px 0', background:'transparent',
+            border:'1px solid rgba(255,255,255,0.1)', borderRadius:12,
+            color:'rgba(255,255,255,0.35)', fontFamily:"'Montserrat',sans-serif",
+            fontWeight:700, fontSize:13, cursor:'pointer', letterSpacing:'0.05em',
+          }}>
+            Back to Lobby
+          </button>
+        </div>
+      </div>
+    )
+  }
 
   return null
 }
@@ -929,23 +1100,155 @@ const L = {
 
 /* ── Sub-components ── */
 
-function BattleBar({ round, score, opponent, onSurrender, onHowToPlay }) {
+function Firecrackers() {
+  const [cycle, setCycle] = useState(0)
+  useEffect(() => {
+    const t = setInterval(() => setCycle(c => c + 1), 8500)
+    return () => clearInterval(t)
+  }, [])
+  return <FirecrackerSet key={cycle} />
+}
+
+function FirecrackerSet() {
+  const COLORS = ['#ffca45', '#a855f7', '#22c55e', '#ef4444', '#60a5fa', '#f97316', '#fff', '#fb923c']
+  const TRAVEL = 0.55
+
+  const SHOTS = [
+    { x: 22, toY: 22, delay: 0.1,  color: '#ffca45' },
+    { x: 76, toY: 18, delay: 0.9,  color: '#a855f7' },
+    { x: 46, toY: 14, delay: 1.7,  color: '#22c55e' },
+    { x: 12, toY: 42, delay: 2.5,  color: '#ef4444' },
+    { x: 88, toY: 35, delay: 3.3,  color: '#60a5fa' },
+    { x: 57, toY: 20, delay: 4.1,  color: '#f97316' },
+    { x: 32, toY: 30, delay: 4.9,  color: '#ffca45' },
+    { x: 70, toY: 17, delay: 5.7,  color: '#a855f7' },
+  ]
+
+  const particles = []
+  SHOTS.forEach((shot, si) => {
+    for (let i = 0; i < 18; i++) {
+      const angle = (i / 18) * 360
+      const dist = 36 + (i % 4) * 14
+      const rad = angle * Math.PI / 180
+      particles.push({
+        id: `${si}-${i}`,
+        x: shot.x, y: shot.toY,
+        dx: Math.cos(rad) * dist,
+        dy: Math.sin(rad) * dist,
+        color: COLORS[(si * 3 + i) % COLORS.length],
+        delay: shot.delay + TRAVEL,
+        size: 5 + (i % 3) * 2,
+        isRect: i % 3 === 1,
+      })
+    }
+  })
+
   return (
-    <div style={{ display: 'flex', alignItems: 'center', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, padding: '8px 14px', marginBottom: 14, gap: 8 }}>
-      <span style={{ fontSize: 13, color: 'var(--muted)' }}>Round {round}/5</span>
-      {onHowToPlay && <button onClick={onHowToPlay} style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.15)', borderRadius: '50%', width: 22, height: 22, color: 'rgba(255,255,255,0.5)', fontSize: 11, fontWeight: 700, cursor: 'pointer', flexShrink: 0, padding: 0 }}>?</button>}
-      <div style={{ marginLeft: 'auto', fontSize: 20, fontWeight: 800, color: '#fff', letterSpacing: 2 }}>
-        {score.you} <span style={{ color: 'var(--muted)', fontWeight: 300 }}>—</span> {score.opponent}
+    <div style={{ position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 6, overflow: 'hidden' }}>
+      <style>{`
+        @keyframes rocketUp {
+          0%   { opacity: 1; transform: translateX(-50%) translateY(0); }
+          85%  { opacity: 1; }
+          100% { opacity: 0; transform: translateX(-50%) translateY(var(--travel)); }
+        }
+        @keyframes crackerBurst {
+          0%   { transform: translate(-50%,-50%) scale(1.4); opacity: 1; }
+          70%  { opacity: 1; }
+          100% { transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(0); opacity: 0; }
+        }
+      `}</style>
+
+      {/* Rockets launch from bottom */}
+      {SHOTS.map((shot, si) => (
+        <div key={`r-${si}`} style={{
+          position: 'absolute',
+          left: `${shot.x}%`, top: '95%',
+          width: 3, height: 14,
+          borderRadius: 2,
+          background: `linear-gradient(to bottom, transparent, ${shot.color})`,
+          boxShadow: `0 0 8px ${shot.color}, 0 -6px 14px ${shot.color}88`,
+          '--travel': `${shot.toY - 95}vh`,
+          animation: `rocketUp ${TRAVEL}s ease-in ${shot.delay}s both`,
+        }} />
+      ))}
+
+      {/* Burst particles at peak */}
+      {particles.map(p => (
+        <div key={p.id} style={{
+          position: 'absolute',
+          left: `${p.x}%`, top: `${p.y}%`,
+          width: p.isRect ? p.size * 0.45 : p.size,
+          height: p.size,
+          borderRadius: p.isRect ? 2 : '50%',
+          background: p.color,
+          boxShadow: `0 0 ${p.size + 3}px ${p.color}cc`,
+          opacity: 0,
+          '--dx': `${p.dx}px`,
+          '--dy': `${p.dy}px`,
+          animation: `crackerBurst 1.0s cubic-bezier(0.1,0.8,0.3,1) ${p.delay}s forwards`,
+        }} />
+      ))}
+    </div>
+  )
+}
+
+function BattleBar({ round, score, opponent, onSurrender, onHowToPlay, roundHistory = [] }) {
+  const MONT = "'Montserrat',sans-serif"
+
+  // Build sequential dot lists — fills left to right in order of wins/draws
+  const yourDots = []
+  const theirDots = []
+  roundHistory.forEach(r => {
+    if (r === 'you')           yourDots.push('green')
+    else if (r === 'draw')   { yourDots.push('yellow'); theirDots.push('yellow') }
+    else if (r === 'opponent') theirDots.push('green')
+  })
+
+  function dotStyle(color) {
+    if (color === 'green')  return { bg: '#22c55e', shadow: '0 0 7px rgba(34,197,94,0.8)',  border: 'none' }
+    if (color === 'yellow') return { bg: '#eab308', shadow: '0 0 7px rgba(234,179,8,0.9)',  border: 'none' }
+    return { bg: 'rgba(255,255,255,0.1)', shadow: 'none', border: '1px solid rgba(255,255,255,0.2)' }
+  }
+
+  return (
+    <div style={{ display:'flex', alignItems:'center', background:'var(--surface)', border:'1px solid var(--border)', borderRadius:10, padding:'8px 12px', marginBottom:14, gap:6 }}>
+      <span style={{ fontSize:11, color:'var(--muted)', fontFamily:MONT, fontWeight:700, letterSpacing:'0.04em', flexShrink:0 }}>
+        R{typeof round === 'number' ? round : round}/5
+      </span>
+      {onHowToPlay && <button onClick={onHowToPlay} style={{ background:'transparent', border:'1px solid rgba(255,255,255,0.15)', borderRadius:'50%', width:20, height:20, color:'rgba(255,255,255,0.5)', fontSize:10, fontWeight:700, cursor:'pointer', flexShrink:0, padding:0 }}>?</button>}
+
+      {/* 3v3 dots */}
+      <div style={{ display:'flex', alignItems:'center', flex:1, justifyContent:'center', gap:10 }}>
+        {/* Your dots — fill left to right */}
+        <div style={{ display:'flex', gap:5 }}>
+          {Array.from({ length: 3 }, (_, i) => {
+            const { bg, shadow, border } = dotStyle(yourDots[i])
+            return <div key={i} style={{ width:10, height:10, borderRadius:'50%', transition:'all 0.3s', background:bg, border, boxShadow:shadow }} />
+          })}
+        </div>
+        {/* Score */}
+        <div style={{ fontSize:17, fontWeight:900, color:'#fff', letterSpacing:2, fontFamily:MONT, minWidth:48, textAlign:'center' }}>
+          {score.you}<span style={{ color:'var(--muted)', fontWeight:300, fontSize:12 }}>—</span>{score.opponent}
+        </div>
+        {/* Opp dots — fill left to right */}
+        <div style={{ display:'flex', gap:5 }}>
+          {Array.from({ length: 3 }, (_, i) => {
+            const { bg, shadow, border } = dotStyle(theirDots[i])
+            return <div key={i} style={{ width:10, height:10, borderRadius:'50%', transition:'all 0.3s', background:bg, border, boxShadow:shadow }} />
+          })}
+        </div>
       </div>
-      <span style={{ fontSize: 12, color: 'var(--muted)' }}>vs {opponent}</span>
+
+      <span style={{ fontSize:11, color:'var(--muted)', flexShrink:0, maxWidth:72, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>vs {opponent}</span>
+
       {onSurrender && (
         onSurrender.confirming
-          ? <div style={{ display: 'flex', gap: 4, marginLeft: 8 }}>
-              <span style={{ fontSize: 11, color: '#ef4444', alignSelf: 'center' }}>Sure?</span>
-              <button onClick={onSurrender.confirm} style={{ background: '#ef4444', border: 'none', borderRadius: 6, color: '#fff', fontSize: 11, padding: '3px 8px', cursor: 'pointer', fontWeight: 700 }}>Yes</button>
-              <button onClick={onSurrender.cancel} style={{ background: 'transparent', border: '1px solid #444', borderRadius: 6, color: '#aaa', fontSize: 11, padding: '3px 6px', cursor: 'pointer' }}>No</button>
+          ? <div style={{ display:'flex', gap:4, marginLeft:4 }}>
+              <span style={{ fontSize:11, color:'#ef4444', alignSelf:'center' }}>Sure?</span>
+              <button onClick={onSurrender.confirm} style={{ background:'#ef4444', border:'none', borderRadius:6, color:'#fff', fontSize:11, padding:'3px 8px', cursor:'pointer', fontWeight:700 }}>Yes</button>
+              <button onClick={onSurrender.cancel} style={{ background:'transparent', border:'1px solid #444', borderRadius:6, color:'#aaa', fontSize:11, padding:'3px 6px', cursor:'pointer' }}>No</button>
             </div>
-          : <button onClick={onSurrender.start} style={{ marginLeft: 8, background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.4)', borderRadius: 6, color: '#ef4444', fontSize: 11, padding: '3px 8px', cursor: 'pointer', fontWeight: 600 }}>
+          : <button onClick={onSurrender.start} style={{ marginLeft:4, background:'rgba(239,68,68,0.15)', border:'1px solid rgba(239,68,68,0.4)', borderRadius:6, color:'#ef4444', fontSize:11, padding:'3px 8px', cursor:'pointer', fontWeight:600 }}>
               Surrender
             </button>
       )}
@@ -957,7 +1260,7 @@ function HandGrid({ hand, stat, pickedId, onPick, disabled }) {
   return (
     <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap' }}>
       {hand.map((card, i) => (
-        <div key={i} style={{ width: 100, opacity: disabled ? 0.5 : 1, flexShrink: 0 }}>
+        <div key={i} style={{ width: 130, opacity: disabled ? 0.5 : 1, flexShrink: 0 }}>
           <FutCard
             card={card}
             selected={pickedId === card.card_id}

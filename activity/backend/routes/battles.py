@@ -142,18 +142,22 @@ async def verify_ws_token(token: str):
 
 
 def load_deck(db, user_id: int, deck_name: str):
+    from routes.decks import parse_cards_field
     row = db.execute(
         "SELECT cards FROM decks WHERE user_id = ? AND deck_name = ?", (user_id, deck_name)
     ).fetchone()
     if not row:
         return None
-    card_ids = [int(x) for x in row["cards"].split(",") if x.strip()]
+    slots = parse_cards_field(row["cards"])
     cards = []
-    for cid in card_ids:
+    for slot in slots:
+        cid     = slot["card_id"]
+        edition = slot["edition"]
         card = db.execute("SELECT * FROM cards WHERE card_id = ?", (cid,)).fetchone()
         if card:
             d = dict(card)
             d["image_url"] = "/images/" + os.path.basename(d["image_path"]) if d.get("image_path") else None
+            d["edition"] = edition
             del d["image_path"]
             cards.append(d)
     return cards
@@ -369,13 +373,17 @@ async def end_game(room):
 # ── Fantasy Draft helpers ─────────────────────────────────────────
 
 def get_draft_cards(round_num: int, used_ids: set, db):
-    """Tier-ramped card selection: rounds 1-2 = tier1, 3-4 = tier1+2, 5 = tier2+3"""
-    if round_num <= 2:
+    """Round tiers: 1=low, 2=low+mid, 3=mid, 4=mid+high, 5=high"""
+    if round_num == 1:
         tiers = [1]
-    elif round_num <= 4:
+    elif round_num == 2:
         tiers = [1, 2]
-    else:
+    elif round_num == 3:
+        tiers = [2]
+    elif round_num == 4:
         tiers = [2, 3]
+    else:
+        tiers = [3]
     tier_ph = ",".join("?" * len(tiers))
     if used_ids:
         id_ph = ",".join("?" * len(used_ids))

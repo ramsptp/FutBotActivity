@@ -491,7 +491,10 @@ function MyListingsTab({ token, showToast }) {
 
 function ListCardTab({ token, showToast, onListed }) {
   const [collection, setCollection] = useState(null)
-  const [selected, setSelected]     = useState(null)   // null = pick grid
+  const [deckCardIds, setDeckCardIds] = useState(new Set())
+  const [deckMap, setDeckMap]        = useState({})
+  const [dupeOnly, setDupeOnly]      = useState(false)
+  const [selected, setSelected]     = useState(null)
   const [confirming, setConfirming] = useState(false)
   const [price, setPrice]           = useState('')
   const [duration, setDuration]     = useState('24h')
@@ -499,14 +502,31 @@ function ListCardTab({ token, showToast, onListed }) {
 
   const topRef = useRef(null)
 
-  useEffect(() => { apiFetch('/api/collection', token).then(setCollection) }, [])
+  useEffect(() => {
+    apiFetch('/api/collection', token).then(setCollection)
+    apiFetch('/api/decks', token).then(decks => {
+      const ids = new Set()
+      const map = {}
+      decks.forEach(deck => {
+        deck.cards.forEach(card => {
+          // edition-specific key, or wildcard for legacy decks without edition
+          const key = card.edition != null ? `${card.card_id}:${card.edition}` : `${card.card_id}:*`
+          ids.add(key)
+          const mapKey = `${card.card_id}:${card.edition ?? '*'}`
+          map[mapKey] = [...(map[mapKey] || []), deck.deck_name]
+        })
+      })
+      setDeckCardIds(ids)
+      setDeckMap(map)
+    }).catch(() => {})
+  }, [])
 
   useEffect(() => {
     try {
       const page = topRef.current?.closest?.('.page')
       if (page) page.scrollTop = 0
     } catch (_) {}
-  }, [selected, confirming])
+  }, [selected, confirming, dupeOnly])
 
   const minPrice = selected ? calcMinPrice(selected) : 0
   const priceNum = parseInt(price) || 0
@@ -534,30 +554,90 @@ function ListCardTab({ token, showToast, onListed }) {
     }
   }
 
+  // Build the display list — in dupe mode, exclude the lowest-edition copy of each card
+  const displayCards = (() => {
+    if (!collection) return []
+    if (!dupeOnly) return [...collection].sort((a, b) => (b.overall || 0) - (a.overall || 0))
+    const groups = {}
+    collection.forEach(card => {
+      ;(groups[card.card_id] = groups[card.card_id] || []).push(card)
+    })
+    const extras = []
+    Object.values(groups).forEach(group => {
+      if (group.length < 2) return
+      const sorted = [...group].sort((a, b) => (a.edition ?? 0) - (b.edition ?? 0))
+      extras.push(...sorted.slice(1))
+    })
+    return extras
+  })()
+
+  const dupeCount = (() => {
+    if (!collection) return 0
+    const groups = {}
+    collection.forEach(c => { (groups[c.card_id] = groups[c.card_id] || []).push(c) })
+    return Object.values(groups).reduce((n, g) => n + Math.max(0, g.length - 1), 0)
+  })()
+
   const rc = selected ? (RARITY_COLOR[selected.card_rarity] || '#f0c040') : '#f0c040'
 
-  // ── Pick grid (always rendered) ──
-  // Details + Confirm float above as fixed overlays so scroll position never matters
   return (
-    <div>
-      <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', letterSpacing: 2, textTransform: 'uppercase', marginBottom: 12 }}>Select a card to list</div>
+    <div ref={topRef}>
+      {/* Header row: label + dupe toggle */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+        <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', letterSpacing: 2, textTransform: 'uppercase' }}>Select a card to list</div>
+        {collection && dupeCount > 0 && (
+          <button onClick={() => setDupeOnly(d => !d)} style={{
+            display: 'flex', alignItems: 'center', gap: 6,
+            background: dupeOnly ? 'rgba(240,192,64,0.12)' : 'rgba(255,255,255,0.04)',
+            border: `1px solid ${dupeOnly ? 'rgba(240,192,64,0.5)' : 'rgba(255,255,255,0.1)'}`,
+            borderRadius: 20, padding: '5px 12px', cursor: 'pointer',
+            fontSize: 11, fontWeight: 700,
+            color: dupeOnly ? '#f0c040' : 'rgba(255,255,255,0.4)',
+            transition: 'all 0.15s',
+          }}>
+            <span style={{ fontSize: 10 }}>⚡</span>
+            Dupes only
+            <span style={{
+              background: dupeOnly ? '#f0c040' : 'rgba(255,255,255,0.12)',
+              color: dupeOnly ? '#000' : 'rgba(255,255,255,0.5)',
+              borderRadius: 10, padding: '1px 6px', fontSize: 9, fontWeight: 800,
+            }}>{dupeCount}</span>
+          </button>
+        )}
+      </div>
+
       {!collection ? (
         <div style={{ textAlign: 'center', paddingTop: 50, color: 'rgba(255,255,255,0.2)', fontSize: 13 }}>Loading collection…</div>
+      ) : dupeOnly && displayCards.length === 0 ? (
+        <div style={{ textAlign: 'center', paddingTop: 50 }}>
+          <div style={{ fontSize: 36, marginBottom: 10, opacity: 0.4 }}>✨</div>
+          <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.35)', fontWeight: 600 }}>No duplicate cards</div>
+        </div>
       ) : !collection.length ? (
         <div style={{ textAlign: 'center', paddingTop: 50, color: 'rgba(255,255,255,0.3)' }}>No cards in collection</div>
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))', gap: 10 }}>
-          {collection.map((card, i) => (
-            <div key={`${card.card_id}-${card.edition ?? i}`} onClick={() => pickCard(card)} style={{ cursor: 'pointer' }}>
-              <div style={{ position: 'relative', borderRadius: 10, overflow: 'hidden' }}>
-                <FutCard card={card} />
-                <div style={{ position: 'absolute', top: 4, right: 4, background: 'rgba(0,0,0,0.78)', borderRadius: 5, padding: '2px 5px', fontSize: 9, fontWeight: 700, color: '#fff', lineHeight: 1.3 }}>
-                  #{(card.edition ?? 0) + 1}<span style={{ color: 'rgba(255,255,255,0.4)', fontWeight: 400 }}>/{card.copies ?? '?'}</span>
+          {displayCards.map((card, i) => {
+            const deckKey = card.edition != null ? `${card.card_id}:${card.edition}` : `${card.card_id}:*`
+            const inDeck = deckCardIds.has(deckKey) || deckCardIds.has(`${card.card_id}:*`)
+            const deckNames = deckMap[deckKey] || deckMap[`${card.card_id}:*`] || []
+            return (
+              <div key={`${card.card_id}-${card.edition ?? i}`} onClick={() => pickCard(card)} style={{ cursor: 'pointer' }}>
+                <div style={{ position: 'relative', borderRadius: 10, overflow: 'hidden' }}>
+                  <FutCard card={card} />
+                  <div style={{ position: 'absolute', top: 4, right: 4, zIndex: 2, background: 'rgba(0,0,0,0.78)', borderRadius: 5, padding: '2px 5px', fontSize: 9, fontWeight: 700, color: '#fff', lineHeight: 1.3 }}>
+                    #{(card.edition ?? 0) + 1}<span style={{ color: 'rgba(255,255,255,0.4)', fontWeight: 400 }}>/{card.copies ?? '?'}</span>
+                  </div>
+                  {inDeck && (
+                    <div title={`In deck: ${deckNames.join(', ')}`} style={{ position: 'absolute', top: 4, left: 4, zIndex: 2, background: 'rgba(168,85,247,0.9)', borderRadius: 4, padding: '2px 5px', fontSize: 8, fontWeight: 800, color: '#fff', letterSpacing: 0.5, lineHeight: 1.3 }}>
+                      DECK
+                    </div>
+                  )}
                 </div>
+                <div style={{ textAlign: 'center', marginTop: 3, fontSize: 10, color: 'rgba(255,255,255,0.3)' }}>{card.overall} OVR</div>
               </div>
-              <div style={{ textAlign: 'center', marginTop: 3, fontSize: 10, color: 'rgba(255,255,255,0.3)' }}>{card.overall} OVR</div>
-            </div>
-          ))}
+            )
+          })}
         </div>
       )}
 
@@ -572,6 +652,15 @@ function ListCardTab({ token, showToast, onListed }) {
                 <div style={{ fontSize: 15, fontWeight: 800, color: '#e2e8f0', fontFamily: "'Montserrat',sans-serif", marginBottom: 4 }}>{selected.name}</div>
                 <div style={{ fontSize: 12, color: rc, marginBottom: 2 }}>Ed #{(selected.edition ?? 0) + 1} · {selected.card_rarity}</div>
                 <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)' }}>{selected.overall} OVR · {selected.card_type}</div>
+                {(() => {
+                  const sk = selected.edition != null ? `${selected.card_id}:${selected.edition}` : `${selected.card_id}:*`
+                  const names = deckMap[sk] || deckMap[`${selected.card_id}:*`] || []
+                  return names.length > 0 ? (
+                    <div style={{ marginTop: 6, fontSize: 10, color: '#c084fc', fontWeight: 700 }}>
+                      In deck: {names.join(', ')}
+                    </div>
+                  ) : null
+                })()}
               </div>
             </div>
             <div style={{ marginBottom: 16 }}>

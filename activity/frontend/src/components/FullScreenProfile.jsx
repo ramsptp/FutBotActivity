@@ -64,6 +64,7 @@ export default function FullScreenProfile({ user, token, viewUser = null, onClos
   const [profileTab, setProfileTab]     = useState('overview')
   const [historyData, setHistoryData]   = useState(null)
   const [collectionData, setCollectionData] = useState(null)
+  const [friendStatus, setFriendStatus] = useState(null) // null | 'friend' | 'pending' | 'none'
 
   const isOwn = !viewUser
   const displayId     = viewUser ? viewUser.user_id : user?.id
@@ -76,6 +77,17 @@ export default function FullScreenProfile({ user, token, viewUser = null, onClos
       setData(d)
       if (isOwn) setSelected(d.player.display_title || '')
     }).catch(() => {})
+
+    if (!isOwn) {
+      apiFetch('/api/friends', token).then(friends => {
+        const isFriend = friends.some(f => String(f.user_id) === String(viewUser.user_id))
+        if (isFriend) { setFriendStatus('friend'); return }
+        apiFetch('/api/friends/requests', token).then(reqs => {
+          const isPending = reqs.outgoing?.some(r => String(r.user_id) === String(viewUser.user_id))
+          setFriendStatus(isPending ? 'pending' : 'none')
+        }).catch(() => setFriendStatus('none'))
+      }).catch(() => setFriendStatus('none'))
+    }
   }, [])
 
   useEffect(() => {
@@ -183,15 +195,59 @@ export default function FullScreenProfile({ user, token, viewUser = null, onClos
                   )}
                 </div>
                 {(data?.player?.display_title || p?.display_title) && (
-                  <div style={s.heroTitle}>
-                    <span className="material-symbols-outlined" style={{ fontSize: 14, fontVariationSettings: "'FILL' 1", color: '#ffca45' }}>emoji_events</span>
-                    {data?.player?.display_title}
-                  </div>
+                  <TitleBadge
+                    title={data?.player?.display_title}
+                    description={data?.titles?.find(t => t.title === data?.player?.display_title)?.description}
+                    style={s.heroTitle}
+                  />
                 )}
                 {isOwn && (
                   <div style={s.heroCoins}>
                     <div style={s.coinDot}>$</div>
                     <span>{data?.player?.coins?.toLocaleString() ?? '—'} coins</span>
+                  </div>
+                )}
+                {!isOwn && friendStatus === 'none' && (
+                  <button
+                    onClick={async () => {
+                      setFriendStatus('pending')
+                      await apiFetch('/api/friends/request', token, {
+                        method: 'POST',
+                        body: JSON.stringify({ to_user_id: viewUser.user_id, to_name: viewUser.name }),
+                      }).catch(() => setFriendStatus('none'))
+                    }}
+                    style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 8,
+                      background: 'linear-gradient(135deg, rgba(34,197,94,0.18), rgba(34,197,94,0.06))',
+                      border: '1px solid rgba(34,197,94,0.4)', borderRadius: 10,
+                      color: '#4ade80', padding: '8px 18px', fontSize: 13, fontWeight: 800,
+                      cursor: 'pointer', fontFamily: MONTSERRAT, letterSpacing: '0.05em',
+                    }}
+                  >
+                    <span className="material-symbols-outlined" style={{ fontSize: 17, fontVariationSettings: "'FILL' 1" }}>person_add</span>
+                    Add Friend
+                  </button>
+                )}
+                {!isOwn && friendStatus === 'pending' && (
+                  <div style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 8,
+                    background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)',
+                    borderRadius: 10, color: '#64748b', padding: '8px 18px',
+                    fontSize: 13, fontWeight: 700, fontFamily: MONTSERRAT,
+                  }}>
+                    <span className="material-symbols-outlined" style={{ fontSize: 17 }}>schedule</span>
+                    Request Sent
+                  </div>
+                )}
+                {!isOwn && friendStatus === 'friend' && (
+                  <div style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 8,
+                    background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.25)',
+                    borderRadius: 10, color: '#4ade80', padding: '8px 18px',
+                    fontSize: 13, fontWeight: 700, fontFamily: MONTSERRAT,
+                  }}>
+                    <span className="material-symbols-outlined" style={{ fontSize: 17, fontVariationSettings: "'FILL' 1" }}>check_circle</span>
+                    Friends
                   </div>
                 )}
                 {!isOwn && onTrade && (
@@ -584,8 +640,74 @@ function CardDetailModal({ card, onClose }) {
   )
 }
 
+function TitleBadge({ title, description, style: baseStyle }) {
+  const [hover, setHover] = useState(false)
+  return (
+    <div style={{ position: 'relative', display: 'inline-block' }}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+    >
+      <div style={baseStyle}>
+        <span className="material-symbols-outlined" style={{ fontSize: 14, fontVariationSettings: "'FILL' 1", color: '#ffca45' }}>emoji_events</span>
+        {title}
+      </div>
+      {hover && description && (
+        <div style={{
+          position: 'absolute', bottom: 'calc(100% + 8px)', left: '50%', transform: 'translateX(-50%)',
+          background: 'rgba(10,14,26,0.97)', border: '1px solid rgba(255,202,69,0.25)',
+          borderRadius: 8, padding: '6px 12px', whiteSpace: 'nowrap',
+          fontSize: 11, color: '#94a3b8', fontWeight: 600, pointerEvents: 'none',
+          boxShadow: '0 4px 16px rgba(0,0,0,0.5)', zIndex: 10,
+        }}>
+          {description}
+          <div style={{
+            position: 'absolute', top: '100%', left: '50%', transform: 'translateX(-50%)',
+            borderLeft: '5px solid transparent', borderRight: '5px solid transparent',
+            borderTop: '5px solid rgba(255,202,69,0.25)',
+          }} />
+        </div>
+      )}
+    </div>
+  )
+}
+
 function AchievementsSection({ earnedTitles, isOwn, selectedTitle, onSelect }) {
   const MONT = "'Montserrat', system-ui, sans-serif"
+  const standardTitles = new Set(ALL_ACHIEVEMENTS.map(a => a.title))
+  // Secret achievements (e.g. admin-granted) — only visible to the owner who earned them
+  const secretEarned = isOwn ? [...earnedTitles].filter(t => !standardTitles.has(t)) : []
+
+  function AchRow({ icon, title, description, earned, isSelected, onClick, secret }) {
+    return (
+      <div
+        onClick={onClick}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 10,
+          padding: '10px 12px', borderRadius: 10,
+          background: isSelected ? 'rgba(255,202,69,0.1)' : earned ? 'rgba(255,255,255,0.04)' : 'rgba(255,255,255,0.01)',
+          border: `1px solid ${isSelected ? 'rgba(255,202,69,0.35)' : earned ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.03)'}`,
+          cursor: earned && isOwn ? 'pointer' : 'default',
+          opacity: earned ? 1 : 0.4,
+          transition: 'all 0.15s',
+        }}
+      >
+        <div style={{
+          width: 34, height: 34, borderRadius: 9, flexShrink: 0,
+          background: isSelected ? 'rgba(255,202,69,0.18)' : secret ? 'rgba(255,202,69,0.12)' : earned ? 'rgba(168,85,247,0.15)' : 'rgba(255,255,255,0.04)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17,
+        }}>
+          {earned ? icon : '🔒'}
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: isSelected ? '#ffca45' : earned ? '#e2e8f0' : '#475569', fontFamily: MONT }}>{title}</div>
+          <div style={{ fontSize: 10, color: '#475569', marginTop: 1 }}>{description}</div>
+        </div>
+        {isOwn && earned && isSelected && <span style={{ fontSize: 14, color: '#ffca45', flexShrink: 0 }}>✓</span>}
+        {!isOwn && earned && <span style={{ fontSize: 12, color: '#4ade80', flexShrink: 0 }}>✓</span>}
+      </div>
+    )
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
       {isOwn && (
@@ -599,11 +721,7 @@ function AchievementsSection({ earnedTitles, isOwn, selectedTitle, onSelect }) {
             cursor: 'pointer', transition: 'all 0.15s',
           }}
         >
-          <div style={{
-            width: 32, height: 32, borderRadius: 8, flexShrink: 0,
-            background: 'rgba(71,85,105,0.2)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15,
-          }}>🚫</div>
+          <div style={{ width: 34, height: 34, borderRadius: 9, flexShrink: 0, background: 'rgba(71,85,105,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15 }}>🚫</div>
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: 12, fontWeight: 700, color: selectedTitle === '' ? '#94a3b8' : '#475569', fontFamily: MONT }}>No Title</div>
             <div style={{ fontSize: 10, color: '#334155', marginTop: 1 }}>Display nothing below your name</div>
@@ -611,37 +729,28 @@ function AchievementsSection({ earnedTitles, isOwn, selectedTitle, onSelect }) {
           {selectedTitle === '' && <span style={{ fontSize: 14, color: '#94a3b8' }}>✓</span>}
         </div>
       )}
-      {ALL_ACHIEVEMENTS.map(a => {
+
+      {ALL_ACHIEVEMENTS.filter(a => !isOwn || earnedTitles.has(a.title)).map(a => {
         const earned = earnedTitles.has(a.title)
         const isSelected = selectedTitle === a.title
         return (
-          <div
-            key={a.slug}
+          <AchRow key={a.slug}
+            icon={a.icon} title={a.title} description={a.description}
+            earned={earned} isSelected={isSelected}
             onClick={() => earned && isOwn && onSelect?.(isSelected ? '' : a.title)}
-            style={{
-              display: 'flex', alignItems: 'center', gap: 10,
-              padding: '10px 12px', borderRadius: 10,
-              background: isSelected ? 'rgba(255,202,69,0.1)' : earned ? 'rgba(255,255,255,0.04)' : 'rgba(255,255,255,0.01)',
-              border: `1px solid ${isSelected ? 'rgba(255,202,69,0.35)' : earned ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.03)'}`,
-              cursor: earned && isOwn ? 'pointer' : 'default',
-              opacity: earned ? 1 : 0.4,
-              transition: 'all 0.15s',
-            }}
-          >
-            <div style={{
-              width: 34, height: 34, borderRadius: 9, flexShrink: 0,
-              background: isSelected ? 'rgba(255,202,69,0.18)' : earned ? 'rgba(168,85,247,0.15)' : 'rgba(255,255,255,0.04)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17,
-            }}>
-              {earned ? a.icon : '🔒'}
-            </div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: isSelected ? '#ffca45' : earned ? '#e2e8f0' : '#475569', fontFamily: MONT }}>{a.title}</div>
-              <div style={{ fontSize: 10, color: '#475569', marginTop: 1 }}>{a.description}</div>
-            </div>
-            {isOwn && earned && isSelected && <span style={{ fontSize: 14, color: '#ffca45', flexShrink: 0 }}>✓</span>}
-            {!isOwn && earned && <span style={{ fontSize: 12, color: '#4ade80', flexShrink: 0 }}>✓</span>}
-          </div>
+          />
+        )
+      })}
+
+      {/* Secret achievements — only shown to the owner who has earned them */}
+      {secretEarned.map(title => {
+        const isSelected = selectedTitle === title
+        return (
+          <AchRow key={title}
+            icon="✨" title={title} description="Special achievement"
+            earned isSelected={isSelected} secret
+            onClick={() => onSelect?.(isSelected ? '' : title)}
+          />
         )
       })}
     </div>

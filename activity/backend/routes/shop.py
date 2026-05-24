@@ -1,7 +1,7 @@
 import os
 import random
 from datetime import datetime, timedelta
-from typing import List
+from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from auth import get_current_user
@@ -267,7 +267,7 @@ async def buy_pack(pack_type: str, discord_user=Depends(get_current_user)):
 
 class SellBatchItem(BaseModel):
     card_id: int
-    edition: int = None
+    edition: Optional[int] = None
 
 class SellBatchBody(BaseModel):
     items: List[SellBatchItem]

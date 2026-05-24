@@ -116,8 +116,18 @@ function OfferColumn({ label, offer, isMine, locked, confirmed, onRemove, onAddC
 function CardPicker({ token, onPick, onClose }) {
   const [collection, setCollection] = useState(null)
   const [search, setSearch]         = useState('')
+  const [deckCardIds, setDeckCardIds] = useState(new Set())
 
-  useEffect(() => { apiFetch('/api/collection', token).then(setCollection) }, [])
+  useEffect(() => {
+    apiFetch('/api/collection', token).then(setCollection)
+    apiFetch('/api/decks', token).then(decks => {
+      const ids = new Set()
+      decks.forEach(deck => deck.cards.forEach(card => {
+        ids.add(card.edition != null ? `${card.card_id}:${card.edition}` : `${card.card_id}:*`)
+      }))
+      setDeckCardIds(ids)
+    }).catch(() => {})
+  }, [])
 
   const filtered = collection
     ? (search.trim()
@@ -160,6 +170,11 @@ function CardPicker({ token, onPick, onClose }) {
                   {card.edition != null && (
                     <div style={{ position: 'absolute', top: 3, right: 3, background: 'rgba(0,0,0,0.78)', borderRadius: 4, padding: '2px 5px', fontSize: 8, color: '#fff', fontWeight: 700 }}>
                       #{card.edition + 1}
+                    </div>
+                  )}
+                  {(deckCardIds.has(card.edition != null ? `${card.card_id}:${card.edition}` : `${card.card_id}:*`) || deckCardIds.has(`${card.card_id}:*`)) && (
+                    <div style={{ position: 'absolute', top: 3, left: 3, zIndex: 2, background: 'rgba(168,85,247,0.9)', borderRadius: 4, padding: '2px 5px', fontSize: 8, fontWeight: 800, color: '#fff', letterSpacing: 0.5 }}>
+                      DECK
                     </div>
                   )}
                 </div>
