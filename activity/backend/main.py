@@ -15,6 +15,8 @@ from routes.market import router as market_router
 from routes.trades import router as trades_router
 from routes.friends import router as friends_router
 from routes.leaderboard import router as leaderboard_router
+from routes.social import router as social_router
+from routes.social_games import router as social_games_router
 from db import get_db
 
 app = FastAPI()
@@ -179,6 +181,8 @@ app.include_router(market_router,  prefix="/api")
 app.include_router(trades_router)
 app.include_router(friends_router,     prefix="/api")
 app.include_router(leaderboard_router, prefix="/api")
+app.include_router(social_router)
+app.include_router(social_games_router)
 
 @app.get("/api/health")
 def health():

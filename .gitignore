@@ -5,6 +5,7 @@ dev.db
 cards_game.db
 activity/frontend/.env
 activity/backend/.env
+activity/backend/data/
 activity/frontend/node_modules/
 __pycache__/
 *.pyc
@@ -12,4 +13,4 @@ node_modules/
 futbot/
 *.png
 stitch_futbot_minimal_activity_ui (1)/
-
+.commandcode/

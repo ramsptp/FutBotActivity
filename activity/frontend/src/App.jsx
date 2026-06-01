@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { discordSdk } from './lib/discord'
 import { apiFetch } from './lib/api'
 import Nav from './components/Nav'
+import ModeSelector from './components/ModeSelector'
 import Home from './pages/Home'
 import Collection from './pages/Collection'
 import DeckBuilder from './pages/DeckBuilder'
@@ -13,10 +14,16 @@ import TradeScreen from './pages/TradeScreen'
 import LoadingScreen from './components/LoadingScreen'
 import ChallengeNotification from './components/ChallengeNotification'
 import TutorialOverlay from './components/TutorialOverlay'
+import SocialHome from './pages/social/SocialHome'
+import GuessThePlayer from './pages/social/GuessThePlayer'
+import HigherOrLower from './pages/social/HigherOrLower'
+import FootballSurvivor from './pages/social/FootballSurvivor'
 
 function App() {
   const [auth, setAuth] = useState(null)
   const [error, setError] = useState(null)
+  const [mode, setMode] = useState(null) // null | 'arena' | 'social'
+  const [socialGame, setSocialGame] = useState(null) // null | 'guess-player' | 'higher-lower' | 'football-survivor'
   const [page, setPage] = useState('home')
   const [starterCards, setStarterCards] = useState(null)
   const [tutorialStep, setTutorialStep] = useState(0)
@@ -102,6 +109,36 @@ function App() {
   const token = auth.access_token
   const user = auth.user
 
+  // Show mode selector if no mode selected yet
+  if (!mode) {
+    return <ModeSelector onSelectMode={setMode} />
+  }
+
+  // SOCIAL MODE
+  if (mode === 'social') {
+    // Game routing
+    if (socialGame === 'guess-player') {
+      return <GuessThePlayer token={token} onBack={() => setSocialGame(null)} />
+    }
+    if (socialGame === 'higher-lower') {
+      return <HigherOrLower token={token} user={user} onBack={() => setSocialGame(null)} />
+    }
+    if (socialGame === 'football-survivor') {
+      return <FootballSurvivor token={token} user={user} onBack={() => setSocialGame(null)} />
+    }
+
+    // Social home
+    return (
+      <SocialHome
+        token={token}
+        user={user}
+        onBackToMenu={() => setMode(null)}
+        onSelectGame={setSocialGame}
+      />
+    )
+  }
+
+  // ARENA MODE
   const withBg = page !== 'battle' && page !== 'home'
 
   return (
@@ -140,6 +177,32 @@ function App() {
           if (res?.room_id) setTradeRoomId(res.room_id)
         }}
       />}
+
+      {/* Back to menu button */}
+      <button
+        onClick={() => setMode(null)}
+        style={{
+          position: 'fixed',
+          top: 16,
+          left: 16,
+          zIndex: 50,
+          background: 'rgba(15,23,41,0.8)',
+          border: '1px solid rgba(168,85,247,0.3)',
+          borderRadius: 10,
+          padding: '8px 14px',
+          color: '#fff',
+          fontSize: 12,
+          fontWeight: 600,
+          cursor: 'pointer',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+          backdropFilter: 'blur(8px)',
+        }}
+      >
+        <span className="material-symbols-outlined" style={{ fontSize: 16 }}>arrow_back</span>
+        Menu
+      </button>
 
       {/* Watermark */}
       <div style={{
