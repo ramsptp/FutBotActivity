@@ -546,6 +546,7 @@ async def auto_join_impostor(request: Request):
     channel_id = body.get('channel_id')
     player_id = body.get('player_id')
     player_name = body.get('player_name')
+    avatar = body.get('avatar')
     
     if not channel_id:
         channel_id = "LOCAL_DEV_ROOM"
@@ -557,7 +558,7 @@ async def auto_join_impostor(request: Request):
             "room_id": room_id,
             "host_id": player_id,
             "status": "waiting",
-            "players": [{"id": player_id, "name": player_name}],
+            "players": [{"id": player_id, "name": player_name, "avatar": avatar, "is_ready": False}],
             "secret_word": None,
             "category": None,
             "impostor_id": None,
@@ -568,20 +569,57 @@ async def auto_join_impostor(request: Request):
             "winner": None,
             "settings": {
                 "clue_time": 30,
-                "voting_time": 60
+                "voting_time": 60,
+                "show_category": True
             }
         }
     else:
         room = impostor_rooms[room_id]
         if room["status"] == "waiting":
             if not any(str(p["id"]) == str(player_id) for p in room["players"]):
-                room["players"].append({"id": player_id, "name": player_name})
+                room["players"].append({"id": player_id, "name": player_name, "avatar": avatar, "is_ready": False})
+        elif room["status"] == "results":
+            # If the game is already over, auto-reset the room for the new players
+            room["status"] = "waiting"
+            room["secret_word"] = None
+            room["category"] = None
+            room["impostor_id"] = None
+            room["turn_index"] = 0
+            room["clues"] = []
+            room["votes"] = {}
+            room["vote_end_time"] = None
+            room["winner"] = None
+            for p in room["players"]:
+                p["name"] = p["name"].replace(" (Spectator)", "")
+            if not any(str(p["id"]) == str(player_id) for p in room["players"]):
+                room["players"].append({"id": player_id, "name": player_name, "avatar": avatar, "is_ready": False})
         else:
             # If game started, let them spectate or resume if they were already in it
             if not any(str(p["id"]) == str(player_id) for p in room["players"]):
-                room["players"].append({"id": player_id, "name": player_name + " (Spectator)"})
+                room["players"].append({"id": player_id, "name": player_name + " (Spectator)", "avatar": avatar, "is_ready": False})
             
     return {"room": impostor_rooms[room_id]}
+
+@router.post("/games/impostor/ready")
+async def toggle_impostor_ready(request: Request):
+    body = await request.json()
+    room_id = body.get('room_id')
+    player_id = body.get('player_id')
+    
+    if room_id not in impostor_rooms:
+        raise HTTPException(status_code=404, detail="Room not found")
+        
+    room = impostor_rooms[room_id]
+    
+    if room["status"] != "waiting":
+        raise HTTPException(status_code=400, detail="Can only ready up in lobby")
+        
+    for p in room["players"]:
+        if str(p["id"]) == str(player_id):
+            p["is_ready"] = not p.get("is_ready", False)
+            break
+            
+    return {"room": room}
 
 @router.post("/games/impostor/settings")
 async def update_settings(request: Request):
@@ -622,9 +660,9 @@ async def get_impostor_room(room_id: str):
         room["turn_index"] += 1
         if room["turn_index"] >= len(room["players"]):
             room["status"] = "voting"
-            room["vote_end_time"] = time.time() + room["settings"]["voting_time"]
+            room["vote_end_time"] = time.time() + room["settings"]["voting_time"] if room["settings"]["voting_time"] > 0 else None
         else:
-            room["clue_end_time"] = time.time() + room["settings"]["clue_time"]
+            room["clue_end_time"] = time.time() + room["settings"]["clue_time"] if room["settings"]["clue_time"] > 0 else None
             
     elif room["status"] == "voting" and room.get("vote_end_time") and time.time() > room["vote_end_time"]:
         vote_counts = {}
@@ -647,7 +685,7 @@ async def get_impostor_room(room_id: str):
                 voted_out_id = most_voted_ids[0]
                 if str(voted_out_id) == str(room["impostor_id"]):
                     room["status"] = "guess"
-                    room["guess_end_time"] = time.time() + room["settings"].get("clue_time", 30)
+                    room["guess_end_time"] = time.time() + room["settings"].get("clue_time", 30) if room["settings"].get("clue_time", 30) > 0 else None
                 else:
                     room["status"] = "results"
                     room["winner"] = "impostor"
@@ -715,9 +753,10 @@ async def reset_impostor_room(request: Request):
     room["vote_end_time"] = None
     room["winner"] = None
     
-    # Clean spectator tags
+    # Clean spectator tags and reset ready state
     for p in room["players"]:
         p["name"] = p["name"].replace(" (Spectator)", "")
+        p["is_ready"] = False
         
     return {"room": room}
 
@@ -726,17 +765,26 @@ async def start_impostor_game(request: Request):
     import time
     body = await request.json()
     room_id = body.get('room_id')
+    player_id = body.get('player_id')
     
     if room_id not in impostor_rooms:
         raise HTTPException(status_code=404, detail="Room not found")
         
     room = impostor_rooms[room_id]
     
+    if str(room["host_id"]) != str(player_id):
+        raise HTTPException(status_code=403, detail="Only host can start the game")
+    
     # Filter out spectators
     active_players = [p for p in room["players"] if "(Spectator)" not in p["name"]]
     if len(active_players) < 3:
         raise HTTPException(status_code=400, detail="Need at least 3 players")
         
+    # Check if all non-host active players are ready
+    for p in active_players:
+        if str(p["id"]) != str(room["host_id"]) and not p.get("is_ready", False):
+            raise HTTPException(status_code=400, detail="Not all players are ready")
+            
     supabase = get_supabase()
     
     result = supabase.table("impostor_words").select("*").execute()
@@ -759,7 +807,7 @@ async def start_impostor_game(request: Request):
     room["clues"] = []
     room["votes"] = {}
     room["winner"] = None
-    room["clue_end_time"] = time.time() + room["settings"]["clue_time"]
+    room["clue_end_time"] = time.time() + room["settings"]["clue_time"] if room["settings"]["clue_time"] > 0 else None
     
     return {"room": room}
 
