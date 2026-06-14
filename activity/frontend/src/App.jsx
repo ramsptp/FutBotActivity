@@ -18,6 +18,7 @@ import SocialHome from './pages/social/SocialHome'
 import GuessThePlayer from './pages/social/GuessThePlayer'
 import HigherOrLower from './pages/social/HigherOrLower'
 import FootballSurvivor from './pages/social/FootballSurvivor'
+import FootballImpostor from './pages/social/FootballImpostor'
 
 function App() {
   const [auth, setAuth] = useState(null)
@@ -125,6 +126,9 @@ function App() {
     }
     if (socialGame === 'football-survivor') {
       return <FootballSurvivor token={token} user={user} onBack={() => setSocialGame(null)} />
+    }
+    if (socialGame === 'football-impostor') {
+      return <FootballImpostor token={token} user={user} onBack={() => setSocialGame(null)} channelId={discordSdk.channelId} />
     }
 
     // Social home

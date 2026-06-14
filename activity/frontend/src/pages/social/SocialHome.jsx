@@ -19,12 +19,12 @@ const GAMES = [
     status: 'coming-soon',
   },
   {
-    id: 'football-survivor',
-    name: 'Football Survivor',
-    icon: '🏆',
-    description: 'Vote and eliminate players',
-    color: '#22c55e',
-    status: 'coming-soon',
+    id: 'football-impostor',
+    name: 'Football Impostor',
+    icon: '🤫',
+    description: 'Find the fake fan among you',
+    color: '#ef4444',
+    status: 'ready',
   },
 ]
 

@@ -536,6 +536,342 @@ async def reveal_survivor_results(request: Request):
     }
 
 
+# ============ FOOTBALL IMPOSTOR ============
+
+impostor_rooms: Dict[str, dict] = {}
+
+@router.post("/games/impostor/auto-join")
+async def auto_join_impostor(request: Request):
+    body = await request.json()
+    channel_id = body.get('channel_id')
+    player_id = body.get('player_id')
+    player_name = body.get('player_name')
+    
+    if not channel_id:
+        channel_id = "LOCAL_DEV_ROOM"
+        
+    room_id = channel_id
+    
+    if room_id not in impostor_rooms:
+        impostor_rooms[room_id] = {
+            "room_id": room_id,
+            "host_id": player_id,
+            "status": "waiting",
+            "players": [{"id": player_id, "name": player_name}],
+            "secret_word": None,
+            "category": None,
+            "impostor_id": None,
+            "turn_index": 0,
+            "clues": [],
+            "votes": {},
+            "vote_end_time": None,
+            "winner": None,
+            "settings": {
+                "clue_time": 30,
+                "voting_time": 60
+            }
+        }
+    else:
+        room = impostor_rooms[room_id]
+        if room["status"] == "waiting":
+            if not any(str(p["id"]) == str(player_id) for p in room["players"]):
+                room["players"].append({"id": player_id, "name": player_name})
+        else:
+            # If game started, let them spectate or resume if they were already in it
+            if not any(str(p["id"]) == str(player_id) for p in room["players"]):
+                room["players"].append({"id": player_id, "name": player_name + " (Spectator)"})
+            
+    return {"room": impostor_rooms[room_id]}
+
+@router.post("/games/impostor/settings")
+async def update_settings(request: Request):
+    body = await request.json()
+    room_id = body.get('room_id')
+    player_id = body.get('player_id')
+    settings = body.get('settings')
+    
+    if room_id not in impostor_rooms:
+        raise HTTPException(status_code=404, detail="Room not found")
+        
+    room = impostor_rooms[room_id]
+    if str(room["host_id"]) != str(player_id):
+        raise HTTPException(status_code=403, detail="Only host can change settings")
+        
+    if room["status"] != "waiting":
+        raise HTTPException(status_code=400, detail="Can only change settings in lobby")
+        
+    room["settings"].update(settings)
+    return {"room": room}
+
+@router.get("/games/impostor/room/{room_id}")
+async def get_impostor_room(room_id: str):
+    import time
+    if room_id not in impostor_rooms:
+        raise HTTPException(status_code=404, detail="Room not found")
+        
+    room = impostor_rooms[room_id]
+    
+    # Process ghost timeouts
+    if room["status"] == "clues" and room.get("clue_end_time") and time.time() > room["clue_end_time"]:
+        current_player = room["players"][room["turn_index"]]
+        room["clues"].append({
+            "player_id": current_player["id"],
+            "player_name": current_player["name"],
+            "clue": "[SKIPPED]"
+        })
+        room["turn_index"] += 1
+        if room["turn_index"] >= len(room["players"]):
+            room["status"] = "voting"
+            room["vote_end_time"] = time.time() + room["settings"]["voting_time"]
+        else:
+            room["clue_end_time"] = time.time() + room["settings"]["clue_time"]
+            
+    elif room["status"] == "voting" and room.get("vote_end_time") and time.time() > room["vote_end_time"]:
+        vote_counts = {}
+        for v in room["votes"].values():
+            vote_counts[v] = vote_counts.get(v, 0) + 1
+            
+        if not vote_counts:
+            room["status"] = "results"
+            room["winner"] = "impostor"
+            room["results_reason"] = "Nobody voted! The Impostor escaped."
+        else:
+            max_votes = max(vote_counts.values())
+            most_voted_ids = [k for k, v in vote_counts.items() if v == max_votes]
+            
+            if len(most_voted_ids) > 1:
+                room["status"] = "results"
+                room["winner"] = "impostor"
+                room["results_reason"] = "The vote was a tie! The Impostor escaped."
+            else:
+                voted_out_id = most_voted_ids[0]
+                if str(voted_out_id) == str(room["impostor_id"]):
+                    room["status"] = "guess"
+                    room["guess_end_time"] = time.time() + room["settings"].get("clue_time", 30)
+                else:
+                    room["status"] = "results"
+                    room["winner"] = "impostor"
+                    innocent_name = next((p["name"] for p in room["players"] if str(p["id"]) == str(voted_out_id)), "Someone")
+                    room["results_reason"] = f"You voted out {innocent_name}, who was innocent. The Impostor escaped!"
+
+    elif room["status"] == "guess" and room.get("guess_end_time") and time.time() > room["guess_end_time"]:
+        room["status"] = "results"
+        room["winner"] = "crew"
+        room["results_reason"] = f"The Impostor ran out of time to guess '{room['secret_word']}'!"
+
+    return room
+
+@router.post("/games/impostor/leave")
+async def leave_impostor_room(request: Request):
+    body = await request.json()
+    room_id = body.get('room_id')
+    player_id = body.get('player_id')
+    
+    if room_id not in impostor_rooms:
+        return {"success": True}
+        
+    room = impostor_rooms[room_id]
+    
+    # Remove player
+    room["players"] = [p for p in room["players"] if str(p["id"]) != str(player_id)]
+    
+    if not room["players"]:
+        # Delete room if empty
+        del impostor_rooms[room_id]
+        return {"success": True}
+        
+    # Reassign host if needed
+    if str(room["host_id"]) == str(player_id):
+        room["host_id"] = room["players"][0]["id"]
+        
+    # If mid-game and impostor left
+    if room["status"] in ["clues", "voting", "guess"] and str(room["impostor_id"]) == str(player_id):
+        room["status"] = "results"
+        room["winner"] = "crew"
+        room["results_reason"] = "The Impostor disconnected. The Crew wins!"
+        
+    return {"room": room}
+
+@router.post("/games/impostor/reset")
+async def reset_impostor_room(request: Request):
+    body = await request.json()
+    room_id = body.get('room_id')
+    player_id = body.get('player_id')
+    
+    if room_id not in impostor_rooms:
+        raise HTTPException(status_code=404, detail="Room not found")
+        
+    room = impostor_rooms[room_id]
+    if str(room["host_id"]) != str(player_id):
+        raise HTTPException(status_code=403, detail="Only host can reset")
+        
+    room["status"] = "waiting"
+    room["secret_word"] = None
+    room["category"] = None
+    room["impostor_id"] = None
+    room["turn_index"] = 0
+    room["clues"] = []
+    room["votes"] = {}
+    room["vote_end_time"] = None
+    room["winner"] = None
+    
+    # Clean spectator tags
+    for p in room["players"]:
+        p["name"] = p["name"].replace(" (Spectator)", "")
+        
+    return {"room": room}
+
+@router.post("/games/impostor/start2")
+async def start_impostor_game(request: Request):
+    import time
+    body = await request.json()
+    room_id = body.get('room_id')
+    
+    if room_id not in impostor_rooms:
+        raise HTTPException(status_code=404, detail="Room not found")
+        
+    room = impostor_rooms[room_id]
+    
+    # Filter out spectators
+    active_players = [p for p in room["players"] if "(Spectator)" not in p["name"]]
+    if len(active_players) < 3:
+        raise HTTPException(status_code=400, detail="Need at least 3 players")
+        
+    supabase = get_supabase()
+    
+    result = supabase.table("impostor_words").select("*").execute()
+    if not result.data:
+        raise HTTPException(status_code=500, detail="No words in database")
+        
+    word_obj = random.choice(result.data)
+    room["secret_word"] = word_obj["word"]
+    room["category"] = word_obj["category"]
+    
+    impostor = random.choice(active_players)
+    room["impostor_id"] = impostor["id"]
+    
+    random.shuffle(active_players)
+    # Only active players take turns
+    room["players"] = active_players
+    
+    room["status"] = "clues"
+    room["turn_index"] = 0
+    room["clues"] = []
+    room["votes"] = {}
+    room["winner"] = None
+    room["clue_end_time"] = time.time() + room["settings"]["clue_time"]
+    
+    return {"room": room}
+
+@router.post("/games/impostor/clue2")
+async def submit_impostor_clue(request: Request):
+    import time
+    body = await request.json()
+    room_id = body.get('room_id')
+    player_id = body.get('player_id')
+    clue = body.get('clue')
+    
+    if room_id not in impostor_rooms:
+        raise HTTPException(status_code=404, detail="Room not found")
+        
+    room = impostor_rooms[room_id]
+    
+    if room["status"] != "clues":
+        raise HTTPException(status_code=400, detail="Not in clue phase")
+        
+    current_player = room["players"][room["turn_index"]]
+    if str(current_player["id"]) != str(player_id) and clue != "[SKIPPED]":
+        raise HTTPException(status_code=400, detail="Not your turn")
+        
+    room["clues"].append({
+        "player_id": current_player["id"],
+        "player_name": current_player["name"],
+        "clue": clue
+    })
+    
+    room["turn_index"] += 1
+    
+    if room["turn_index"] >= len(room["players"]):
+        room["status"] = "voting"
+        room["vote_end_time"] = time.time() + room["settings"]["voting_time"]
+    else:
+        room["clue_end_time"] = time.time() + room["settings"]["clue_time"]
+        
+    return {"room": room}
+
+@router.post("/games/impostor/vote2")
+async def submit_impostor_vote(request: Request):
+    body = await request.json()
+    room_id = body.get('room_id')
+    player_id = body.get('player_id')
+    target_id = body.get('target_id')
+    
+    if room_id not in impostor_rooms:
+        raise HTTPException(status_code=404, detail="Room not found")
+        
+    room = impostor_rooms[room_id]
+    if room["status"] != "voting":
+        raise HTTPException(status_code=400, detail="Not in voting phase")
+        
+    room["votes"][str(player_id)] = target_id
+    
+    if len(room["votes"]) >= len(room["players"]):
+        vote_counts = {}
+        for v in room["votes"].values():
+            vote_counts[v] = vote_counts.get(v, 0) + 1
+            
+        max_votes = max(vote_counts.values())
+        most_voted_ids = [k for k, v in vote_counts.items() if v == max_votes]
+        
+        if len(most_voted_ids) > 1:
+            room["status"] = "results"
+            room["winner"] = "impostor"
+            room["results_reason"] = "The vote was a tie! The Impostor escaped."
+        else:
+            voted_out_id = most_voted_ids[0]
+            if str(voted_out_id) == str(room["impostor_id"]):
+                room["status"] = "guess"
+                import time
+                room["guess_end_time"] = time.time() + room["settings"].get("clue_time", 30)
+            else:
+                room["status"] = "results"
+                room["winner"] = "impostor"
+                innocent_name = next((p["name"] for p in room["players"] if str(p["id"]) == str(voted_out_id)), "Someone")
+                room["results_reason"] = f"You voted out {innocent_name}, who was innocent. The Impostor escaped!"
+                
+    return {"room": room}
+
+@router.post("/games/impostor/guess2")
+async def impostor_guess(request: Request):
+    body = await request.json()
+    room_id = body.get('room_id')
+    guess = body.get('guess', '').strip().lower()
+    
+    if room_id not in impostor_rooms:
+        raise HTTPException(status_code=404, detail="Room not found")
+        
+    room = impostor_rooms[room_id]
+    if room["status"] != "guess":
+        raise HTTPException(status_code=400, detail="Not in guess phase")
+        
+    secret_word = room["secret_word"].lower()
+    
+    room["status"] = "results"
+    room["impostor_guess"] = guess
+    
+    import re
+    clean_guess = re.sub(r'[^\w\s]', '', guess)
+    clean_secret = re.sub(r'[^\w\s]', '', secret_word)
+    
+    if clean_guess == clean_secret or (clean_guess and clean_guess in clean_secret) or (clean_secret and clean_secret in clean_guess):
+        room["winner"] = "impostor"
+        room["results_reason"] = f"The Impostor was caught, but they correctly guessed '{room['secret_word']}' and stole the win!"
+    else:
+        room["winner"] = "crew"
+        room["results_reason"] = f"The Impostor was caught and failed to guess '{room['secret_word']}'!"
+        
+    return {"room": room}
+
 # ============ SHARED ============
 
 @router.get("/player-count")
