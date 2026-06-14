@@ -1,28 +1,119 @@
-from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from fastapi import APIRouter, HTTPException, Query, Request
+
 from typing import List, Optional, Dict
 import random
+import re
 from supabase_client import get_supabase
+
+# ============ FUZZY SEARCH UTILS ============
+
+def levenshtein_distance(s1: str, s2: str) -> int:
+    """Calculate edit distance between two strings."""
+    if len(s1) < len(s2):
+        return levenshtein_distance(s2, s1)
+    if len(s2) == 0:
+        return len(s1)
+    
+    previous_row = range(len(s2) + 1)
+    for i, c1 in enumerate(s1):
+        current_row = [i + 1]
+        for j, c2 in enumerate(s2):
+            insertions = previous_row[j + 1] + 1
+            deletions = current_row[j] + 1
+            substitutions = previous_row[j] + (c1 != c2)
+            current_row.append(min(insertions, deletions, substitutions))
+        previous_row = current_row
+    
+    return previous_row[-1]
+
+
+def fuzzy_match(query: str, target: str) -> float:
+    """Return match score 0-1 based on fuzzy matching."""
+    query = query.lower().strip()
+    target = target.lower().strip()
+    
+    # Exact match
+    if query == target:
+        return 1.0
+    
+    # Contains query
+    if query in target:
+        return 0.9
+    
+    # Target starts with query
+    if target.startswith(query):
+        return 0.85
+    
+    # Word boundary match
+    words = target.split()
+    for word in words:
+        if word.startswith(query):
+            return 0.8
+        if query in word:
+            return 0.7
+    
+    # Fuzzy match with edit distance
+    max_len = max(len(query), len(target))
+    if max_len == 0:
+        return 0.0
+    
+    distance = levenshtein_distance(query, target)
+    similarity = 1 - (distance / max_len)
+    
+    if similarity >= 0.6:  # Threshold for fuzzy match
+        return similarity * 0.6  # Scale down fuzzy matches
+    
+    return 0.0
+
+
+# Cache all player names for fast search
+_player_name_cache: List[dict] = []
+
+def get_cached_players():
+    """Get cached player list or fetch from DB."""
+    global _player_name_cache
+    if not _player_name_cache:
+        supabase = get_supabase()
+        result = supabase.table("players").select("id,name").execute()
+        _player_name_cache = result.data or []
+    return _player_name_cache
+
 
 router = APIRouter(prefix="/api/social")
 
+@router.get("/test")
+async def test_endpoint():
+    """Test that new code is loaded."""
+    return {"status": "ok", "version": "2"}
+
+
+@router.get("/games/guess-player/search")
+async def search_players(query: str = Query(..., min_length=1), limit: int = 5):
+    """Fuzzy search for player autocomplete."""
+    players = get_cached_players()
+    query = query.lower().strip()
+    
+    # Score all players
+    scored = []
+    for player in players:
+        name = player.get("name", "")
+        if not name:
+            continue
+        
+        score = fuzzy_match(query, name)
+        if score > 0:
+            scored.append({**player, "score": score})
+    
+    # Sort by score descending
+    scored.sort(key=lambda x: x["score"], reverse=True)
+    
+    # Return top results without score
+    results = [{"id": p["id"], "name": p["name"]} for p in scored[:limit]]
+    return {"results": results, "query": query}
+
 # ============ GUESS THE PLAYER ============
 
-class GuessPlayerRound(BaseModel):
-    clues: List[dict]
-    player_id: int
-    player_name: str  # Hidden from client, used for answer checking
 
-
-class GuessPlayerRequest(BaseModel):
-    guess: str
-    player_id: int
-
-
-class GuessPlayerResponse(BaseModel):
-    correct: bool
-    player: dict
-    clues_revealed: List[dict]
 
 
 CLUE_TYPES = [
@@ -64,69 +155,92 @@ async def get_random_player_for_guess():
     
     return {
         "player_id": player["id"],
+        "player_name": player["name"],  # For "give up" reveal
         "clues": clues,
-        # Don't send player name to client!
     }
 
 
-@router.post("/games/guess-player/check")
-async def check_guess(request: GuessPlayerRequest):
+@router.post("/games/guess-player/check2")
+async def check_guess(request: Request):
     """Check if the guess is correct."""
+    import logging
+    logging.basicConfig(level=logging.INFO)
+    logger = logging.getLogger(__name__)
+    
+    # Parse JSON body manually
+    try:
+        body = await request.json()
+        logger.info(f"Received raw body: {body}")
+    except Exception as e:
+        logger.error(f"Failed to parse JSON: {e}")
+        raise HTTPException(status_code=400, detail="Invalid JSON body")
+    
     supabase = get_supabase()
     
+    guess = body.get('guess', '').strip() if body.get('guess') else ''
+    player_id = body.get('player_id')
+    
+    logger.info(f"Extracted: guess='{guess}', player_id={player_id}, type={type(player_id)}")
+    
+    # Convert player_id to int if it's a string
+    if isinstance(player_id, str):
+        try:
+            player_id = int(player_id)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="player_id must be a number")
+    
+    if not player_id:
+        raise HTTPException(status_code=400, detail="player_id is required")
+    
+    logger.info(f"Final: guess='{guess}', player_id={player_id}, type={type(player_id)}")
+    
     # Get the actual player
-    result = supabase.table("players").select("*").eq("id", request.player_id).single().execute()
+    result = supabase.table("players").select("*").eq("id", player_id).single().execute()
     if not result.data:
         raise HTTPException(status_code=404, detail="Player not found")
     
     player = result.data
     correct_name = player["name"].lower().strip()
-    guess = request.guess.lower().strip()
+    guess_lower = guess.lower()
     
     # Check exact match or contains
-    is_correct = (guess == correct_name or 
-                  guess in correct_name or 
-                  correct_name in guess or
+    is_correct = (guess_lower == correct_name or 
+                  guess_lower in correct_name or 
+                  correct_name in guess_lower or
                   # Check last name only
-                  guess == correct_name.split()[-1].lower())
+                  guess_lower == correct_name.split()[-1].lower())
     
     return {
         "correct": is_correct,
         "player": player,
-        "your_guess": request.guess
+        "your_guess": guess
     }
 
 
 # ============ HIGHER OR LOWER ============
 
-class HigherLowerRound(BaseModel):
-    current_player: dict
-    next_player_id: int
-    stat: str
+STAT_OPTIONS = [
+    {"key": "goals", "label": "Career Goals"},
+    {"key": "assists", "label": "Career Assists"},
+    {"key": "appearances", "label": "Appearances"},
+]
 
 
-class HigherLowerGuess(BaseModel):
-    guess: str  # 'higher' or 'lower'
-    current_player_id: int
-    next_player_id: int
-    stat: str
-
-
-class HigherLowerResult(BaseModel):
-    correct: bool
-    current_value: int
-    next_value: int
-    next_player: dict
-    message: str
-
-
-STAT_OPTIONS = ["goals", "assists", "appearances"]
+@router.get("/games/higher-lower/stats")
+async def get_higher_lower_stats():
+    """Get available stat options."""
+    return {"stats": STAT_OPTIONS}
 
 
 @router.get("/games/higher-lower/start")
-async def start_higher_lower():
-    """Start a new Higher or Lower game with first player."""
+async def start_higher_lower(stat: str = "goals"):
+    """Start a new Higher or Lower game with selected stat."""
     supabase = get_supabase()
+    
+    # Validate stat
+    valid_stats = [s["key"] for s in STAT_OPTIONS]
+    if stat not in valid_stats:
+        stat = "goals"
     
     # Get two random players
     result = supabase.table("players").select("*").gte("appearances", 100).limit(100).execute()
@@ -134,30 +248,37 @@ async def start_higher_lower():
         raise HTTPException(status_code=404, detail="Not enough players")
     
     players = random.sample(result.data, k=2)
-    stat = random.choice(STAT_OPTIONS)
+    stat_label = next(s["label"] for s in STAT_OPTIONS if s["key"] == stat)
     
     return {
         "current_player": players[0],
         "next_player_id": players[1]["id"],
         "stat": stat,
-        "stat_label": stat.replace("_", " ").title()
+        "stat_label": stat_label,
     }
 
 
-@router.post("/games/higher-lower/guess")
-async def check_higher_lower(request: HigherLowerGuess):
+@router.post("/games/higher-lower/guess2")
+async def check_higher_lower(request: Request):
     """Check higher/lower guess and return result."""
     supabase = get_supabase()
     
+    body = await request.json()
+    
+    current_player_id = body.get('current_player_id')
+    next_player_id = body.get('next_player_id')
+    stat = body.get('stat', 'goals')
+    guess = body.get('guess', '').lower()
+    
     # Get both players
-    current = supabase.table("players").select("*").eq("id", request.current_player_id).single().execute()
-    next_player = supabase.table("players").select("*").eq("id", request.next_player_id).single().execute()
+    current = supabase.table("players").select("*").eq("id", current_player_id).single().execute()
+    next_player = supabase.table("players").select("*").eq("id", next_player_id).single().execute()
     
     if not current.data or not next_player.data:
         raise HTTPException(status_code=404, detail="Player not found")
     
-    current_val = current.data.get(request.stat, 0) or 0
-    next_val = next_player.data.get(request.stat, 0) or 0
+    current_val = current.data.get(stat, 0) or 0
+    next_val = next_player.data.get(stat, 0) or 0
     
     # Determine correct answer
     if next_val > current_val:
@@ -167,7 +288,7 @@ async def check_higher_lower(request: HigherLowerGuess):
     else:
         correct_answer = "equal"  # Edge case
     
-    is_correct = request.guess.lower() == correct_answer
+    is_correct = guess == correct_answer or correct_answer == "equal"
     
     # Get next random player for continuing the game
     new_result = supabase.table("players").select("*").gte("appearances", 100).limit(50).execute()
@@ -179,76 +300,82 @@ async def check_higher_lower(request: HigherLowerGuess):
         "next_value": next_val,
         "next_player": next_player.data,
         "new_next_player_id": new_next["id"] if new_next else None,
-        "message": f"{next_player.data['name']} has {next_val} {request.stat} vs {current_val}"
+        "stat_label": next(s["label"] for s in STAT_OPTIONS if s["key"] == stat),
     }
 
 
 # ============ FOOTBALL SURVIVOR ============
 
-class SurvivorRoom(BaseModel):
-    room_id: str
-    players: List[dict]
-    question: Optional[dict]
-    status: str  # 'waiting', 'voting', 'results', 'finished'
-
-
-class CreateSurvivorRoom(BaseModel):
-    host_id: int
-    host_name: str
-
-
-class JoinSurvivorRoom(BaseModel):
-    room_id: str
-    player_id: int
-    player_name: str
-
-
-class SurvivorVote(BaseModel):
-    room_id: str
-    player_id: int
-    vote: str  # 'option_a' or 'option_b'
-
+# Predefined question templates
+SURVIVOR_QUESTIONS = [
+    {"text": "Who is the better striker?", "type": "comparison"},
+    {"text": "Who is the better playmaker?", "type": "comparison"},
+    {"text": "Who had the more successful career?", "type": "comparison"},
+    {"text": "Who would you rather sign for your team?", "type": "preference"},
+    {"text": "Who is more underrated?", "type": "opinion"},
+    {"text": "Who is the bigger club legend?", "type": "opinion"},
+    {"text": "Who was more clutch in big games?", "type": "opinion"},
+    {"text": "Who had better technique?", "type": "comparison"},
+    {"text": "Who would win in a 1v1?", "type": "hypothetical"},
+    {"text": "Who had the better prime years?", "type": "comparison"},
+]
 
 # In-memory storage for rooms (use Redis in production)
 survivor_rooms: Dict[str, dict] = {}
 
 
-@router.post("/games/survivor/create")
-async def create_survivor_room(request: CreateSurvivorRoom):
+@router.post("/games/survivor/create2")
+async def create_survivor_room(request: Request):
     """Create a new Survivor game room."""
     import uuid
+    
+    body = await request.json()
+    host_id = body.get('host_id')
+    host_name = body.get('host_name')
     
     room_id = str(uuid.uuid4())[:8].upper()
     
     survivor_rooms[room_id] = {
         "room_id": room_id,
-        "host_id": request.host_id,
-        "players": [{"id": request.host_id, "name": request.host_name, "alive": True}],
+        "host_id": host_id,
+        "players": [{"id": host_id, "name": host_name, "alive": True}],
         "status": "waiting",
         "question": None,
         "votes": {},
-        "round": 0
+        "round": 0,
+        "vote_end_time": None,
+        "min_players": 4,
+        "max_players": 10,
     }
     
     return {"room_id": room_id, "status": "waiting"}
 
 
-@router.post("/games/survivor/join")
-async def join_survivor_room(request: JoinSurvivorRoom):
+@router.post("/games/survivor/join2")
+async def join_survivor_room(request: Request):
     """Join an existing Survivor room."""
-    if request.room_id not in survivor_rooms:
+    body = await request.json()
+    room_id = body.get('room_id')
+    player_id = body.get('player_id')
+    player_name = body.get('player_name')
+    
+    if room_id not in survivor_rooms:
         raise HTTPException(status_code=404, detail="Room not found")
     
-    room = survivor_rooms[request.room_id]
+    room = survivor_rooms[room_id]
+    
+    # Check room capacity
+    if len(room["players"]) >= room.get("max_players", 10):
+        raise HTTPException(status_code=400, detail="Room is full (max 10 players)")
     
     # Check if player already in room
-    if any(p["id"] == request.player_id for p in room["players"]):
+    if any(p["id"] == player_id for p in room["players"]):
         return {"room": room}
     
     # Add player
     room["players"].append({
-        "id": request.player_id,
-        "name": request.player_name,
+        "id": player_id,
+        "name": player_name,
         "alive": True
     })
     
@@ -264,107 +391,134 @@ async def get_survivor_room(room_id: str):
     return survivor_rooms[room_id]
 
 
-@router.post("/games/survivor/start-round")
-async def start_survivor_round(room_id: str):
-    """Start a new voting round."""
+@router.post("/games/survivor/start-round2")
+async def start_survivor_round(request: Request):
+    """Start a new voting round with 10-second timer."""
+    import time
+    
+    body = await request.json()
+    room_id = body.get('room_id')
+    
     if room_id not in survivor_rooms:
         raise HTTPException(status_code=404, detail="Room not found")
     
     room = survivor_rooms[room_id]
     supabase = get_supabase()
     
+    # Get alive players only
+    alive_players_list = [p for p in room["players"] if p["alive"]]
+    
+    # Check minimum players
+    if len(alive_players_list) < 2:
+        room["status"] = "finished"
+        return {"room": room, "error": "Not enough players remaining"}
+    
     # Get two random players for comparison
     result = supabase.table("players").select("*").gte("appearances", 200).limit(100).execute()
     if len(result.data) < 2:
-        raise HTTPException(status_code=404, detail="Not enough players")
+        raise HTTPException(status_code=404, detail="Not enough players in database")
     
     players = random.sample(result.data, k=2)
     
-    # Generate question
-    stat = random.choice(["goals", "appearances"])
+    # Select random question template
+    question_template = random.choice(SURVIVOR_QUESTIONS)
+    
     question = {
-        "text": f"Who has more career {stat}?",
-        "stat": stat,
-        "option_a": {"name": players[0]["name"], "id": players[0]["id"]},
-        "option_b": {"name": players[1]["name"], "id": players[1]["id"]}
+        "text": question_template["text"],
+        "type": question_template["type"],
+        "option_a": {"name": players[0]["name"], "id": players[0]["id"], "club": players[0].get("club", ""), "position": players[0].get("position", "")},
+        "option_b": {"name": players[1]["name"], "id": players[1]["id"], "club": players[1].get("club", ""), "position": players[1].get("position", "")}
     }
     
     room["question"] = question
     room["status"] = "voting"
     room["votes"] = {}
     room["round"] += 1
+    room["vote_end_time"] = time.time() + 10  # 10 seconds to vote
     
-    return {"room": room}
+    return {"room": room, "vote_duration": 10}
 
 
-@router.post("/games/survivor/vote")
-async def submit_survivor_vote(request: SurvivorVote):
+@router.post("/games/survivor/vote2")
+async def submit_survivor_vote(request: Request):
     """Submit a vote in Survivor."""
-    if request.room_id not in survivor_rooms:
-        raise HTTPException(status_code=404, detail="Room not found")
+    body = await request.json()
+    room_id = body.get('room_id')
+    player_id = body.get('player_id')
+    vote = body.get('vote')
     
-    room = survivor_rooms[request.room_id]
-    room["votes"][str(request.player_id)] = request.vote
-    
-    return {"success": True, "votes_count": len(room["votes"])}
-
-
-@router.post("/games/survivor/reveal")
-async def reveal_survivor_results(room_id: str):
-    """Reveal results and eliminate players."""
     if room_id not in survivor_rooms:
         raise HTTPException(status_code=404, detail="Room not found")
     
     room = survivor_rooms[room_id]
-    supabase = get_supabase()
+    room["votes"][str(player_id)] = vote
     
-    # Get actual stats
-    option_a_id = room["question"]["option_a"]["id"]
-    option_b_id = room["question"]["option_b"]["id"]
-    stat = room["question"]["stat"]
+    return {"success": True, "votes_count": len(room["votes"])}
+
+
+@router.post("/games/survivor/reveal2")
+async def reveal_survivor_results(request: Request):
+    """Reveal results and eliminate minority voters."""
+    body = await request.json()
+    room_id = body.get('room_id')
     
-    player_a = supabase.table("players").select("*").eq("id", option_a_id).single().execute()
-    player_b = supabase.table("players").select("*").eq("id", option_b_id).single().execute()
+    if room_id not in survivor_rooms:
+        raise HTTPException(status_code=404, detail="Room not found")
     
-    val_a = player_a.data.get(stat, 0) or 0
-    val_b = player_b.data.get(stat, 0) or 0
+    room = survivor_rooms[room_id]
     
-    # Determine correct answer
-    if val_a > val_b:
-        correct_option = "option_a"
-    elif val_b > val_a:
-        correct_option = "option_b"
-    else:
-        correct_option = "tie"
+    # Get only alive players who voted
+    alive_players = [p for p in room["players"] if p["alive"]]
+    alive_player_ids = {str(p["id"]) for p in alive_players}
+    
+    # Filter votes to only alive players
+    valid_votes = {k: v for k, v in room["votes"].items() if k in alive_player_ids}
     
     # Count votes
-    votes_a = sum(1 for v in room["votes"].values() if v == "option_a")
-    votes_b = sum(1 for v in room["votes"].values() if v == "option_b")
+    votes_a = sum(1 for v in valid_votes.values() if v == "option_a")
+    votes_b = sum(1 for v in valid_votes.values() if v == "option_b")
+    total_votes = votes_a + votes_b
     
     # Determine minority (eliminate them)
-    if votes_a < votes_b:
-        eliminate_option = "option_a"
-    elif votes_b < votes_a:
-        eliminate_option = "option_b"
-    else:
-        eliminate_option = None  # Tie - no elimination or random
-    
-    # Mark eliminated players
     eliminated = []
-    if eliminate_option:
-        for player_id, vote in room["votes"].items():
-            if vote == eliminate_option:
-                # Find player and mark dead
+    winning_option = None
+    
+    if total_votes == 0:
+        # No votes - random elimination
+        import random
+        if alive_players:
+            victim = random.choice(alive_players)
+            victim["alive"] = False
+            eliminated.append(victim["name"])
+    elif votes_a == votes_b:
+        # Tie - everyone survives
+        pass
+    elif votes_a < votes_b:
+        # Option A is minority - eliminate A voters
+        winning_option = "option_b"
+        for player_id, vote in valid_votes.items():
+            if vote == "option_a":
                 for p in room["players"]:
                     if str(p["id"]) == player_id:
                         p["alive"] = False
                         eliminated.append(p["name"])
+                        break
+    else:
+        # Option B is minority - eliminate B voters
+        winning_option = "option_a"
+        for player_id, vote in valid_votes.items():
+            if vote == "option_b":
+                for p in room["players"]:
+                    if str(p["id"]) == player_id:
+                        p["alive"] = False
+                        eliminated.append(p["name"])
+                        break
     
-    # Check if game over (1 player left)
-    alive_players = [p for p in room["players"] if p["alive"]]
-    if len(alive_players) <= 1:
+    # Check if game over (1 player left or less)
+    remaining_alive = [p for p in room["players"] if p["alive"]]
+    if len(remaining_alive) <= 1:
         room["status"] = "finished"
-        winner = alive_players[0] if alive_players else None
+        winner = remaining_alive[0] if remaining_alive else None
     else:
         room["status"] = "results"
         winner = None
@@ -372,13 +526,12 @@ async def reveal_survivor_results(room_id: str):
     return {
         "room": room,
         "results": {
-            "correct_option": correct_option,
-            "option_a_value": val_a,
-            "option_b_value": val_b,
             "votes_a": votes_a,
             "votes_b": votes_b,
+            "winning_option": winning_option,
             "eliminated": eliminated,
-            "winner": winner
+            "winner": winner,
+            "remaining": len(remaining_alive)
         }
     }
 

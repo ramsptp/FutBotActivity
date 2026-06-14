@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { apiFetch } from '../../lib/api'
 
 const EMBERS = [
@@ -10,63 +10,98 @@ const EMBERS = [
   { left: '92%', size: 5, delay: '5s', dur: '7s' },
 ]
 
-const STAT_LABELS = {
-  goals: 'Career Goals',
-  assists: 'Career Assists',
-  appearances: 'Career Appearances',
-}
+const STAT_OPTIONS = [
+  { key: 'goals', label: 'Career Goals', icon: '⚽' },
+  { key: 'assists', label: 'Career Assists', icon: '🅰️' },
+  { key: 'appearances', label: 'Appearances', icon: '👕' },
+]
 
-export default function HigherOrLower({ token, onBack }) {
-  const [gameState, setGameState] = useState('loading')
+const COUNTDOWN_SECONDS = 5
+const TOTAL_ROUNDS = 15
+
+export default function HigherOrLower({ token, user, onBack }) {
+  const [gameState, setGameState] = useState('menu') // menu, playing, result, gameover
+  const [selectedStat, setSelectedStat] = useState('goals')
+  const [currentRound, setCurrentRound] = useState(1)
   const [currentPlayer, setCurrentPlayer] = useState(null)
   const [nextPlayerId, setNextPlayerId] = useState(null)
-  const [stat, setStat] = useState('goals')
+  const [statLabel, setStatLabel] = useState('Career Goals')
+  const [countdown, setCountdown] = useState(COUNTDOWN_SECONDS)
+  const [hasAnswered, setHasAnswered] = useState(false)
+  const [result, setResult] = useState(null)
   const [streak, setStreak] = useState(0)
   const [highScore, setHighScore] = useState(() => {
     return parseInt(localStorage.getItem('hol-highscore') || '0')
   })
-  const [result, setResult] = useState(null)
-  const [nextPlayer, setNextPlayer] = useState(null)
+  const [gameStats, setGameStats] = useState({ correct: 0, total: 0 })
 
-  const startGame = useCallback(async () => {
-    setGameState('loading')
+  const timerRef = useRef(null)
+
+  const startGame = async () => {
+    setGameState('playing')
+    setCurrentRound(1)
+    setStreak(0)
+    setGameStats({ correct: 0, total: 0 })
+    await startRound()
+  }
+
+  const startRound = async () => {
+    setHasAnswered(false)
     setResult(null)
-    
+    setCountdown(COUNTDOWN_SECONDS)
+
     try {
-      const data = await apiFetch('/api/social/games/higher-lower/start', token)
+      const data = await apiFetch(`/api/social/games/higher-lower/start?stat=${selectedStat}`, token)
       setCurrentPlayer(data.current_player)
       setNextPlayerId(data.next_player_id)
-      setStat(data.stat)
-      setGameState('playing')
-    } catch (err) {
-      console.error('Failed to start game:', err)
-      setGameState('error')
-    }
-  }, [token])
+      setStatLabel(data.stat_label)
 
-  useEffect(() => {
-    startGame()
-  }, [startGame])
+      // Start countdown
+      startCountdown()
+    } catch (err) {
+      console.error('Failed to start round:', err)
+    }
+  }
+
+  const startCountdown = () => {
+    if (timerRef.current) clearInterval(timerRef.current)
+
+    let timeLeft = COUNTDOWN_SECONDS
+    setCountdown(timeLeft)
+
+    timerRef.current = setInterval(() => {
+      timeLeft -= 1
+      setCountdown(timeLeft)
+
+      if (timeLeft <= 0) {
+        clearInterval(timerRef.current)
+        if (!hasAnswered) {
+          // Time's up - auto wrong answer
+          handleGuess(null)
+        }
+      }
+    }, 1000)
+  }
 
   const handleGuess = async (guess) => {
-    if (gameState !== 'playing') return
-    
-    setGameState('checking')
-    
+    if (hasAnswered) return
+    setHasAnswered(true)
+
+    if (timerRef.current) clearInterval(timerRef.current)
+
     try {
-      const data = await apiFetch('/api/social/games/higher-lower/guess', token, {
+      const data = await apiFetch('/api/social/games/higher-lower/guess2', token, {
         method: 'POST',
         body: JSON.stringify({
-          guess,
+          guess: guess || 'timeout',
           current_player_id: currentPlayer.id,
           next_player_id: nextPlayerId,
-          stat
+          stat: selectedStat
         })
       })
-      
+
       setResult(data)
-      setNextPlayer(data.next_player)
-      
+
       if (data.correct) {
         setStreak(prev => {
           const newStreak = prev + 1
@@ -76,58 +111,45 @@ export default function HigherOrLower({ token, onBack }) {
           }
           return newStreak
         })
-        setGameState('correct')
+        setGameStats(prev => ({ correct: prev.correct + 1, total: prev.total + 1 }))
       } else {
         setStreak(0)
-        setGameState('wrong')
+        setGameStats(prev => ({ ...prev, total: prev.total + 1 }))
+      }
+
+      if (currentRound >= TOTAL_ROUNDS) {
+        setGameState('gameover')
+      } else {
+        setGameState('result')
       }
     } catch (err) {
       console.error('Failed to check guess:', err)
-      setGameState('playing')
     }
   }
 
-  const continueGame = () => {
-    if (result?.new_next_player_id) {
-      setCurrentPlayer(nextPlayer)
-      setNextPlayerId(result.new_next_player_id)
-      setResult(null)
-      setNextPlayer(null)
-      setGameState('playing')
+  const nextRound = async () => {
+    if (currentRound >= TOTAL_ROUNDS) {
+      setGameState('gameover')
     } else {
-      startGame()
+      setCurrentRound(prev => prev + 1)
+      setGameState('playing')
+      await startRound()
     }
   }
 
-  if (gameState === 'loading') {
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current)
+    }
+  }, [])
+
+  // Menu Screen
+  if (gameState === 'menu') {
     return (
       <div style={s.container}>
         <div style={s.bg} />
-        <div style={s.loading}>Loading...</div>
-      </div>
-    )
-  }
-
-  if (gameState === 'error') {
-    return (
-      <div style={s.container}>
-        <div style={s.bg} />
-        <div style={s.error}>
-          <div>Failed to load game</div>
-          <button onClick={onBack} style={s.backBtn}>Back</button>
-        </div>
-      </div>
-    )
-  }
-
-  return (
-    <div style={s.container}>
-      <div style={s.bg} />
-      
-      {EMBERS.map((e, i) => (
-        <span
-          key={i}
-          style={{
+        {EMBERS.map((e, i) => (
+          <span key={i} style={{
             position: 'absolute',
             left: e.left,
             bottom: '-20px',
@@ -140,21 +162,154 @@ export default function HigherOrLower({ token, onBack }) {
             animationDelay: e.delay,
             opacity: 0.7,
             pointerEvents: 'none',
-          }}
-        />
+          }} />
+        ))}
+
+        <div style={s.header}>
+          <button onClick={onBack} style={s.backBtnSmall}>
+            <span className="material-symbols-outlined">arrow_back</span>
+          </button>
+          <div style={s.title}>Higher or Lower</div>
+          <div style={s.highScoreBadge}>Best: {highScore}</div>
+        </div>
+
+        <div style={s.menuContainer}>
+          <div style={s.statCard}>
+            <div style={s.statTitle}>Select Stat Category</div>
+            <div style={s.statOptions}>
+              {STAT_OPTIONS.map((stat) => (
+                <button
+                  key={stat.key}
+                  onClick={() => setSelectedStat(stat.key)}
+                  style={{
+                    ...s.statBtn,
+                    background: selectedStat === stat.key
+                      ? 'linear-gradient(135deg, #7c3aed, #a855f7)'
+                      : 'rgba(15,23,41,0.8)',
+                    borderColor: selectedStat === stat.key ? '#a855f7' : 'rgba(168,85,247,0.3)',
+                  }}
+                >
+                  <span style={s.statIcon}>{stat.icon}</span>
+                  <span style={s.statLabel}>{stat.label}</span>
+                </button>
+              ))}
+            </div>
+
+            <div style={s.gameInfo}>
+              <div style={s.infoItem}>⏱️ {COUNTDOWN_SECONDS} seconds per round</div>
+              <div style={s.infoItem}>🎯 {TOTAL_ROUNDS} rounds</div>
+              <div style={s.infoItem}>🏆 Build your streak!</div>
+            </div>
+
+            <button onClick={startGame} style={s.startBtn}>
+              Start Game
+            </button>
+          </div>
+
+          <div style={s.howToPlay}>
+            <div style={s.howToPlayTitle}>How to Play</div>
+            <ul style={s.howToPlayList}>
+              <li>Compare two players' stats</li>
+              <li>Guess if next player is Higher or Lower</li>
+              <li>You have {COUNTDOWN_SECONDS} seconds to decide</li>
+              <li>Build the longest streak possible!</li>
+            </ul>
+          </div>
+        </div>
+
+        <style>{`
+          @keyframes ember-rise {
+            0% { transform: translateY(0) scale(1); opacity: 0; }
+            10% { opacity: 0.7; }
+            90% { opacity: 0.5; }
+            100% { transform: translateY(-100vh) scale(0.3); opacity: 0; }
+          }
+        `}</style>
+      </div>
+    )
+  }
+
+  // Game Over Screen
+  if (gameState === 'gameover') {
+    const accuracy = Math.round((gameStats.correct / gameStats.total) * 100) || 0
+    return (
+      <div style={s.container}>
+        <div style={s.bg} />
+
+        <div style={s.gameOverContainer}>
+          <div style={s.gameOverTitle}>Game Over!</div>
+
+          <div style={s.finalStats}>
+            <div style={s.finalStat}>
+              <div style={s.finalStatValue}>{gameStats.correct}/{TOTAL_ROUNDS}</div>
+              <div style={s.finalStatLabel}>Correct</div>
+            </div>
+            <div style={s.finalStat}>
+              <div style={s.finalStatValue}>{accuracy}%</div>
+              <div style={s.finalStatLabel}>Accuracy</div>
+            </div>
+            <div style={s.finalStat}>
+              <div style={s.finalStatValue}>{highScore}</div>
+              <div style={s.finalStatLabel}>Best Streak</div>
+            </div>
+          </div>
+
+          {accuracy >= 80 && (
+            <div style={s.amazing}>Amazing! 🌟</div>
+          )}
+
+          <button onClick={() => setGameState('menu')} style={s.playAgainBtn}>
+            Play Again
+          </button>
+          <button onClick={onBack} style={s.backBtnMenu}>
+            Back to Menu
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  // Playing Screen
+  return (
+    <div style={s.container}>
+      <div style={s.bg} />
+
+      {EMBERS.map((e, i) => (
+        <span key={i} style={{
+          position: 'absolute',
+          left: e.left,
+          bottom: '-20px',
+          width: e.size,
+          height: e.size,
+          background: 'radial-gradient(circle, rgba(255,200,100,0.9) 0%, rgba(255,100,50,0.4) 50%, transparent 70%)',
+          borderRadius: '50%',
+          filter: 'blur(2px)',
+          animation: `ember-rise ${e.dur} ease-in infinite`,
+          animationDelay: e.delay,
+          opacity: 0.7,
+          pointerEvents: 'none',
+        }} />
       ))}
 
       {/* Header */}
       <div style={s.header}>
-        <button onClick={onBack} style={s.backBtnSmall}>
+        <button onClick={() => setGameState('menu')} style={s.backBtnSmall}>
           <span className="material-symbols-outlined">arrow_back</span>
         </button>
-        <div style={s.title}>Higher or Lower</div>
-        <div style={s.scores}>
-          <div style={s.streak}>Streak: {streak}</div>
-          <div style={s.highScore}>Best: {highScore}</div>
-        </div>
+        <div style={s.roundInfo}>Round {currentRound}/{TOTAL_ROUNDS}</div>
+        <div style={s.streakBadge}>Streak: {streak}</div>
       </div>
+
+      {/* Timer Bar */}
+      {gameState === 'playing' && (
+        <div style={s.timerContainer}>
+          <div style={{
+            ...s.timerBar,
+            width: `${(countdown / COUNTDOWN_SECONDS) * 100}%`,
+            background: countdown <= 2 ? '#ef4444' : countdown <= 3 ? '#fbbf24' : '#22c55e',
+          }} />
+        </div>
+      )}
 
       {/* Game Area */}
       <div style={s.gameArea}>
@@ -166,35 +321,33 @@ export default function HigherOrLower({ token, onBack }) {
             {currentPlayer?.position} • {currentPlayer?.club}
           </div>
           <div style={s.statDisplay}>
-            <div style={s.statValue}>{currentPlayer?.[stat] || 0}</div>
-            <div style={s.statLabel}>{STAT_LABELS[stat]}</div>
+            <div style={s.statValue}>{currentPlayer?.[selectedStat] || 0}</div>
+            <div style={s.statLabelSmall}>{statLabel}</div>
           </div>
         </div>
 
         {/* VS */}
         <div style={s.vs}>VS</div>
 
-        {/* Next Player (Hidden Stat) */}
+        {/* Next Player */}
         <div style={s.playerCard}>
           <div style={s.cardLabel}>Next Player</div>
-          <div style={s.playerName}>{nextPlayer?.name || '???'}</div>
-          <div style={s.playerDetails}>
-            {nextPlayer ? `${nextPlayer?.position} • ${nextPlayer?.club}` : 'Hidden'}
-          </div>
-          
-          {gameState === 'playing' && (
+          <div style={s.playerNameHidden}>???</div>
+          <div style={s.playerDetailsHidden}>Who could it be?</div>
+
+          {gameState === 'playing' && !hasAnswered && (
             <div style={s.guessButtons}>
-              <div style={s.guessLabel}>Has {STAT_LABELS[stat].toLowerCase()}:</div>
+              <div style={s.guessLabel}>Has {statLabel}:</div>
               <div style={s.buttonRow}>
-                <button 
-                  onClick={() => handleGuess('higher')} 
-                  style={{...s.guessBtn, background: 'linear-gradient(135deg, #22c55e, #16a34a)'}}
+                <button
+                  onClick={() => handleGuess('higher')}
+                  style={{ ...s.guessBtn, background: 'linear-gradient(135deg, #22c55e, #16a34a)' }}
                 >
                   Higher ↑
                 </button>
-                <button 
-                  onClick={() => handleGuess('lower')} 
-                  style={{...s.guessBtn, background: 'linear-gradient(135deg, #ef4444, #dc2626)'}}
+                <button
+                  onClick={() => handleGuess('lower')}
+                  style={{ ...s.guessBtn, background: 'linear-gradient(135deg, #ef4444, #dc2626)' }}
                 >
                   Lower ↓
                 </button>
@@ -202,28 +355,21 @@ export default function HigherOrLower({ token, onBack }) {
             </div>
           )}
 
-          {(gameState === 'correct' || gameState === 'wrong') && (
+          {gameState === 'result' && result && (
             <div style={s.reveal}>
-              <div style={s.revealValue}>{result?.next_value || 0}</div>
-              <div style={s.revealLabel}>{STAT_LABELS[stat]}</div>
-              
-              {gameState === 'correct' ? (
+              <div style={s.revealedName}>{result.next_player.name}</div>
+              <div style={s.revealValue}>{result.next_value}</div>
+              <div style={s.revealLabel}>{statLabel}</div>
+
+              {result.correct ? (
                 <div style={s.correctMsg}>Correct! ✓</div>
               ) : (
                 <div style={s.wrongMsg}>Wrong! ✗</div>
               )}
-              
-              {gameState === 'correct' && (
-                <button onClick={continueGame} style={s.continueBtn}>
-                  Continue →
-                </button>
-              )}
-              
-              {gameState === 'wrong' && (
-                <button onClick={startGame} style={s.restartBtn}>
-                  Try Again
-                </button>
-              )}
+
+              <button onClick={nextRound} style={s.continueBtn}>
+                {currentRound >= TOTAL_ROUNDS ? 'See Results' : 'Continue →'}
+              </button>
             </div>
           )}
         </div>
@@ -275,16 +421,134 @@ const s = {
     backdropFilter: 'blur(8px)',
   },
   title: {
-    fontSize: '24px',
+    fontSize: '28px',
     fontWeight: 800,
     color: '#fff',
     fontFamily: "'Montserrat', system-ui, sans-serif",
   },
-  scores: {
-    display: 'flex',
-    gap: '12px',
+  highScoreBadge: {
+    fontSize: '14px',
+    color: '#fbbf24',
+    background: 'rgba(251,191,36,0.15)',
+    padding: '8px 16px',
+    borderRadius: 20,
+    border: '1px solid rgba(251,191,36,0.3)',
   },
-  streak: {
+  menuContainer: {
+    flex: 1,
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '32px',
+    maxWidth: '500px',
+    margin: '0 auto',
+    width: '100%',
+  },
+  statCard: {
+    background: 'rgba(15,23,41,0.95)',
+    border: '2px solid rgba(168,85,247,0.3)',
+    borderRadius: 20,
+    padding: '32px',
+    width: '100%',
+    backdropFilter: 'blur(12px)',
+  },
+  statTitle: {
+    fontSize: '24px',
+    fontWeight: 800,
+    color: '#fff',
+    textAlign: 'center',
+    marginBottom: '24px',
+  },
+  statOptions: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '12px',
+    marginBottom: '24px',
+  },
+  statBtn: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+    padding: '16px 20px',
+    borderRadius: 12,
+    border: '2px solid',
+    cursor: 'pointer',
+    transition: 'all 0.2s',
+  },
+  statIcon: {
+    fontSize: '24px',
+  },
+  statLabel: {
+    fontSize: '18px',
+    fontWeight: 700,
+    color: '#fff',
+  },
+  gameInfo: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '8px',
+    marginBottom: '24px',
+    padding: '16px',
+    background: 'rgba(168,85,247,0.1)',
+    borderRadius: 12,
+  },
+  infoItem: {
+    fontSize: '14px',
+    color: 'rgba(255,255,255,0.7)',
+  },
+  startBtn: {
+    background: 'linear-gradient(135deg, #22c55e, #16a34a)',
+    border: 'none',
+    borderRadius: 12,
+    padding: '20px',
+    color: '#fff',
+    fontSize: '18px',
+    fontWeight: 700,
+    cursor: 'pointer',
+    width: '100%',
+  },
+  howToPlay: {
+    background: 'rgba(15,23,41,0.8)',
+    border: '1px solid rgba(168,85,247,0.2)',
+    borderRadius: 16,
+    padding: '24px',
+    width: '100%',
+  },
+  howToPlayTitle: {
+    fontSize: '16px',
+    fontWeight: 700,
+    color: '#a855f7',
+    marginBottom: '12px',
+    textTransform: 'uppercase',
+  },
+  howToPlayList: {
+    color: 'rgba(255,255,255,0.7)',
+    fontSize: '14px',
+    lineHeight: 1.8,
+    margin: 0,
+    paddingLeft: '20px',
+  },
+  timerContainer: {
+    width: '100%',
+    maxWidth: '600px',
+    margin: '0 auto 20px',
+    height: '6px',
+    background: 'rgba(255,255,255,0.1)',
+    borderRadius: '3px',
+    overflow: 'hidden',
+  },
+  timerBar: {
+    height: '100%',
+    borderRadius: '3px',
+    transition: 'width 1s linear, background 0.3s',
+  },
+  roundInfo: {
+    fontSize: '18px',
+    fontWeight: 700,
+    color: '#fff',
+  },
+  streakBadge: {
     fontSize: '14px',
     color: '#fff',
     background: 'rgba(168,85,247,0.3)',
@@ -292,21 +556,13 @@ const s = {
     borderRadius: 20,
     border: '1px solid rgba(168,85,247,0.5)',
   },
-  highScore: {
-    fontSize: '14px',
-    color: '#fbbf24',
-    background: 'rgba(251,191,36,0.2)',
-    padding: '8px 16px',
-    borderRadius: 20,
-    border: '1px solid rgba(251,191,36,0.4)',
-  },
   gameArea: {
     flex: 1,
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: '24px',
+    gap: '20px',
     maxWidth: '500px',
     margin: '0 auto',
     width: '100%',
@@ -315,55 +571,66 @@ const s = {
     background: 'rgba(15,23,41,0.95)',
     border: '2px solid rgba(168,85,247,0.3)',
     borderRadius: 20,
-    padding: '32px',
+    padding: '28px',
     width: '100%',
     textAlign: 'center',
     backdropFilter: 'blur(12px)',
   },
   cardLabel: {
-    fontSize: '12px',
+    fontSize: '11px',
     color: 'rgba(255,255,255,0.5)',
     textTransform: 'uppercase',
     letterSpacing: '2px',
     marginBottom: '8px',
   },
   playerName: {
-    fontSize: '24px',
+    fontSize: '22px',
     fontWeight: 800,
     color: '#fff',
     marginBottom: '4px',
   },
   playerDetails: {
-    fontSize: '14px',
+    fontSize: '13px',
     color: 'rgba(255,255,255,0.6)',
-    marginBottom: '20px',
+    marginBottom: '16px',
   },
   statDisplay: {
     background: 'rgba(168,85,247,0.15)',
     borderRadius: 12,
-    padding: '20px',
+    padding: '16px',
   },
   statValue: {
-    fontSize: '48px',
+    fontSize: '42px',
     fontWeight: 800,
     color: '#a855f7',
   },
-  statLabel: {
-    fontSize: '14px',
+  statLabelSmall: {
+    fontSize: '13px',
     color: 'rgba(255,255,255,0.6)',
     marginTop: '4px',
   },
   vs: {
-    fontSize: '32px',
+    fontSize: '28px',
     fontWeight: 900,
     color: '#fbbf24',
     textShadow: '0 0 20px rgba(251,191,36,0.5)',
   },
+  playerNameHidden: {
+    fontSize: '22px',
+    fontWeight: 800,
+    color: 'rgba(255,255,255,0.3)',
+    marginBottom: '4px',
+  },
+  playerDetailsHidden: {
+    fontSize: '13px',
+    color: 'rgba(255,255,255,0.3)',
+    marginBottom: '16px',
+  },
   guessButtons: {
-    marginTop: '20px',
+    marginTop: '16px',
   },
   guessLabel: {
-    fontSize: '14px',
+    fontSize: '13px',
     color: 'rgba(255,255,255,0.7)',
     marginBottom: '12px',
   },
@@ -375,76 +642,108 @@ const s = {
   guessBtn: {
     border: 'none',
     borderRadius: 12,
-    padding: '16px 32px',
+    padding: '14px 28px',
     color: '#fff',
-    fontSize: '18px',
+    fontSize: '16px',
     fontWeight: 700,
     cursor: 'pointer',
     flex: 1,
   },
   reveal: {
-    marginTop: '20px',
+    marginTop: '16px',
+  },
+  revealedName: {
+    fontSize: '20px',
+    fontWeight: 700,
+    color: '#fff',
+    marginBottom: '4px',
   },
   revealValue: {
-    fontSize: '48px',
+    fontSize: '36px',
     fontWeight: 800,
     color: '#a855f7',
   },
   revealLabel: {
-    fontSize: '14px',
+    fontSize: '13px',
     color: 'rgba(255,255,255,0.6)',
-    marginBottom: '16px',
+    marginBottom: '12px',
   },
   correctMsg: {
-    fontSize: '24px',
+    fontSize: '22px',
     fontWeight: 800,
     color: '#22c55e',
-    marginBottom: '16px',
+    marginBottom: '12px',
   },
   wrongMsg: {
-    fontSize: '24px',
+    fontSize: '22px',
     fontWeight: 800,
     color: '#ef4444',
-    marginBottom: '16px',
+    marginBottom: '12px',
   },
   continueBtn: {
-    background: 'linear-gradient(135deg, #22c55e, #16a34a)',
-    border: 'none',
-    borderRadius: 12,
-    padding: '16px 40px',
-    color: '#fff',
-    fontSize: '18px',
-    fontWeight: 700,
-    cursor: 'pointer',
-  },
-  restartBtn: {
     background: 'linear-gradient(135deg, #7c3aed, #a855f7)',
     border: 'none',
     borderRadius: 12,
-    padding: '16px 40px',
+    padding: '14px 36px',
+    color: '#fff',
+    fontSize: '16px',
+    fontWeight: 700,
+    cursor: 'pointer',
+  },
+  gameOverContainer: {
+    flex: 1,
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '24px',
+  },
+  gameOverTitle: {
+    fontSize: '48px',
+    fontWeight: 800,
+    color: '#fff',
+  },
+  finalStats: {
+    display: 'flex',
+    gap: '32px',
+    marginBottom: '16px',
+  },
+  finalStat: {
+    textAlign: 'center',
+  },
+  finalStatValue: {
+    fontSize: '36px',
+    fontWeight: 800,
+    color: '#a855f7',
+  },
+  finalStatLabel: {
+    fontSize: '14px',
+    color: 'rgba(255,255,255,0.6)',
+  },
+  amazing: {
+    fontSize: '32px',
+    fontWeight: 800,
+    color: '#fbbf24',
+  },
+  playAgainBtn: {
+    background: 'linear-gradient(135deg, #22c55e, #16a34a)',
+    border: 'none',
+    borderRadius: 12,
+    padding: '20px 48px',
     color: '#fff',
     fontSize: '18px',
     fontWeight: 700,
     cursor: 'pointer',
+    marginTop: '20px',
   },
-  loading: {
-    color: 'rgba(255,255,255,0.7)',
-    fontSize: '18px',
-  },
-  error: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    gap: '20px',
-    color: '#ef4444',
-    fontSize: '18px',
-  },
-  backBtn: {
+  backBtnMenu: {
     background: 'rgba(15,23,41,0.8)',
     border: '1px solid rgba(168,85,247,0.3)',
-    borderRadius: 10,
-    padding: '12px 24px',
+    borderRadius: 12,
+    padding: '16px 32px',
     color: '#fff',
+    fontSize: '16px',
+    fontWeight: 600,
     cursor: 'pointer',
   },
 }

@@ -7,7 +7,11 @@ export async function apiFetch(path, token, options = {}) {
       ...options.headers,
     },
   })
-  if (!res.ok) throw new Error(`API error ${res.status}`)
+  if (!res.ok) {
+    const errorText = await res.text()
+    console.error(`API error ${res.status}:`, errorText)
+    throw new Error(`API error ${res.status}: ${errorText}`)
+  }
   return res.json()
 }
 

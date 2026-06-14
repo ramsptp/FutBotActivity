@@ -8,7 +8,7 @@ const GAMES = [
     icon: '🎯',
     description: 'Guess the footballer from clues',
     color: '#a855f7',
-    status: 'ready',
+    status: 'coming-soon',
   },
   {
     id: 'higher-lower',
@@ -16,7 +16,7 @@ const GAMES = [
     icon: '📈',
     description: 'Compare player stats',
     color: '#3b82f6',
-    status: 'ready',
+    status: 'coming-soon',
   },
   {
     id: 'football-survivor',
@@ -24,7 +24,7 @@ const GAMES = [
     icon: '🏆',
     description: 'Vote and eliminate players',
     color: '#22c55e',
-    status: 'ready',
+    status: 'coming-soon',
   },
 ]
 

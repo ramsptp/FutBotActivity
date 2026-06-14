@@ -266,11 +266,3 @@ cd activity/backend && uvicorn main:app --reload --port 8000
 Vite proxies `/api`, `/ws`, and `/images` to FastAPI locally.
 
 ---
-
-## What Phase 2 Will Change
-
-- Replace `cards_game.db` backup with the live bot DB
-- Extract pack drop logic into a shared module
-- Bot commands trigger activity experiences (e.g. `!open` → pack opening animation)
-- Bot deep-links to the activity
-- Possibly migrate to PostgreSQL if concurrency becomes an issue
