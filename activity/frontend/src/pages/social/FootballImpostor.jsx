@@ -19,6 +19,7 @@ export default function FootballImpostor({ token, user, onBack, channelId }) {
   // Settings
   const [clueTime, setClueTime] = useState(30)
   const [votingTime, setVotingTime] = useState(60)
+  const [totalRounds, setTotalRounds] = useState(5)
 
   const pollRef = useRef(null)
   const timerRef = useRef(null)
@@ -39,6 +40,7 @@ export default function FootballImpostor({ token, user, onBack, channelId }) {
       if (data.room.settings) {
         setClueTime(data.room.settings.clue_time)
         setVotingTime(data.room.settings.voting_time)
+        setTotalRounds(data.room.settings.total_rounds || 5)
       }
       startPolling()
     } catch (err) {
@@ -84,6 +86,7 @@ export default function FootballImpostor({ token, user, onBack, channelId }) {
           if (data.settings && data.status === 'waiting') {
             setClueTime(data.settings.clue_time)
             setVotingTime(data.settings.voting_time)
+            setTotalRounds(data.settings.total_rounds || 5)
           }
 
           return data
@@ -126,7 +129,6 @@ export default function FootballImpostor({ token, user, onBack, channelId }) {
 
         if (remaining <= 0) {
           clearInterval(timerRef.current)
-          handleTimeUp(room.status)
         }
       }, 250)
     } else {
@@ -134,19 +136,8 @@ export default function FootballImpostor({ token, user, onBack, channelId }) {
     }
   }, [room?.status, room?.clue_end_time, room?.vote_end_time, room?.guess_end_time, room?.settings?.clue_time, room?.settings?.voting_time])
 
-  const handleTimeUp = (status) => {
-    const isMyTurn = room?.players?.[room?.turn_index]?.id === user.id
-    if (status === 'clues' && isMyTurn) {
-      submitClue('[SKIPPED]')
-    } else if (status === 'voting' && !hasVoted) {
-      submitVote(user.id) // Vote for self if timed out
-    } else if (status === 'guess' && room?.impostor_id === user.id) {
-      submitGuess('[SKIPPED]')
-    }
-  }
-
   const updateSettings = async (updates) => {
-    const newSettings = { clue_time: clueTime, voting_time: votingTime, show_category: room?.settings?.show_category ?? true, ...updates }
+    const newSettings = { clue_time: clueTime, voting_time: votingTime, total_rounds: totalRounds, show_category: room?.settings?.show_category ?? true, ...updates }
     try {
       await apiFetch('/api/social/games/impostor/settings', token, {
         method: 'POST',
@@ -156,8 +147,9 @@ export default function FootballImpostor({ token, user, onBack, channelId }) {
           settings: newSettings
         })
       })
-      if (updates.clue_time) setClueTime(updates.clue_time)
-      if (updates.voting_time) setVotingTime(updates.voting_time)
+      if (updates.clue_time !== undefined) setClueTime(updates.clue_time)
+      if (updates.voting_time !== undefined) setVotingTime(updates.voting_time)
+      if (updates.total_rounds !== undefined) setTotalRounds(updates.total_rounds)
     } catch (err) {}
   }
 
@@ -186,6 +178,27 @@ export default function FootballImpostor({ token, user, onBack, channelId }) {
     } catch (err) {
       console.error(err)
       setError("Failed to start game. The server took too long. Please try again.")
+    } finally {
+      setIsStarting(false)
+    }
+  }
+
+  const startNextRound = async () => {
+    setIsStarting(true)
+    try {
+      const data = await apiFetch('/api/social/games/impostor/next_round', token, {
+        method: 'POST',
+        body: JSON.stringify({ room_id: room.room_id, player_id: user.id })
+      })
+      if (data.error) {
+        setError(data.error)
+      } else if (data.room) {
+        setRoom(data.room)
+        setGameState(data.room.status)
+      }
+    } catch (err) {
+      console.error(err)
+      setError("Failed to start next round.")
     } finally {
       setIsStarting(false)
     }
@@ -250,15 +263,6 @@ export default function FootballImpostor({ token, user, onBack, channelId }) {
     } catch (err) {}
   }, [roomId, token, user.id])
 
-  // Auto-reset back to lobby after 15 seconds on results screen
-  useEffect(() => {
-    if (gameState === 'results' && room?.host_id === user.id) {
-      const t = setTimeout(() => {
-        resetGame()
-      }, 15000)
-      return () => clearTimeout(t)
-    }
-  }, [gameState, room?.host_id, user.id, resetGame])
 
   const isHost = room?.host_id === user.id
   const isImpostor = room?.impostor_id === user.id
@@ -283,13 +287,19 @@ export default function FootballImpostor({ token, user, onBack, channelId }) {
   return (
     <div style={s.container}>
       <style>
-        {`@import url('https://fonts.googleapis.com/css2?family=Caveat:wght@700&display=swap');`}
+        {`@import url('https://fonts.googleapis.com/css2?family=Caveat:wght@700&display=swap');
+          @media (max-width: 1400px) { .impostor-scale-wrapper { zoom: 0.85; } }
+          @media (max-width: 1200px) { .impostor-scale-wrapper { zoom: 0.75; } }
+          @media (max-width: 1000px) { .impostor-scale-wrapper { zoom: 0.65; } }
+          @media (max-width: 800px) { .impostor-scale-wrapper { zoom: 0.55; } }
+          @media (max-width: 600px) { .impostor-scale-wrapper { zoom: 0.45; } }
+        `}
       </style>
       <div style={s.bg} />
       <div style={s.overlay} />
       <div style={s.noise} />
 
-      <div style={{position: 'relative', zIndex: 10, flex: 1, display: 'flex', flexDirection: 'column'}}>
+      <div className="impostor-scale-wrapper" style={{position: 'relative', zIndex: 10, flex: 1, display: 'flex', flexDirection: 'column', transformOrigin: 'top center'}}>
         {/* HEADER */}
         <div style={s.header}>
           <button onClick={onBack} style={s.backBtn}>
@@ -302,8 +312,8 @@ export default function FootballImpostor({ token, user, onBack, channelId }) {
           </div>
           
           <div style={{display: 'flex', flexDirection: 'column'}}>
-            <div style={s.headerTitle}>IMPOSTOR</div>
-            <div style={s.headerSubtitle}>LOBBY ID: {roomId}</div>
+            <div style={s.headerTitle}>{gameState === 'voting' ? 'VOTING PHASE' : 'IMPOSTOR'}</div>
+            <div style={s.headerSubtitle}>{gameState === 'voting' ? 'Discuss. Analyze. Vote.' : `ROUND ${room?.current_round || 1} OF ${room?.settings?.total_rounds || 5} | LOBBY: ${roomId}`}</div>
           </div>
           
           <div style={s.trustNoOne}>
@@ -451,6 +461,27 @@ export default function FootballImpostor({ token, user, onBack, channelId }) {
                         <div style={votingTime === t ? s.pinPurple : s.pinHidden} />
                         <div style={s.paperVal}>{t === 0 ? '∞' : t}</div>
                         <div style={s.paperSub}>{t === 0 ? 'INFINITE' : 'SECONDS'}</div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div style={s.settingBlock}>
+                  <div style={s.settingTitle}>
+                    <span className="material-symbols-outlined" style={{fontSize: 16}}>format_list_numbered</span>
+                    TOTAL ROUNDS
+                  </div>
+                  <div style={s.settingGrid}>
+                    {[5, 10, 15].map(t => (
+                      <button 
+                        key={t}
+                        disabled={!isHost}
+                        onClick={() => updateSettings({ total_rounds: t })}
+                        style={totalRounds === t ? s.paperBtnActive : s.paperBtn}
+                      >
+                        <div style={totalRounds === t ? s.pinPurple : s.pinHidden} />
+                        <div style={s.paperVal}>{t}</div>
+                        <div style={s.paperSub}>ROUNDS</div>
                       </button>
                     ))}
                   </div>
@@ -648,12 +679,16 @@ export default function FootballImpostor({ token, user, onBack, channelId }) {
                           <div key={i} style={room?.turn_index === i ? s.suspectItemActive : s.suspectItem}>
                             <div style={room?.turn_index === i ? s.suspectNumActive : s.suspectNum}>{i + 1}</div>
                             {getPlayerAvatar(p.id) ? (
-                              <img src={getPlayerAvatar(p.id)} style={{width: 16, height: 16, borderRadius: '50%'}} />
+                              <img src={getPlayerAvatar(p.id)} style={{width: 24, height: 24, borderRadius: '50%'}} />
                             ) : (
-                              <span className="material-symbols-outlined" style={{fontSize: 16, opacity: 0.5}}>person</span>
+                              <span className="material-symbols-outlined" style={{fontSize: 24, opacity: 0.5}}>person</span>
                             )}
                             <div style={s.suspectName}>
                               {p.name} 
+                              <span style={{color: '#fbbf24', marginLeft: 8, fontSize: 10, display: 'flex', alignItems: 'center', gap: 2}}>
+                                <span className="material-symbols-outlined" style={{fontSize: 12}}>star</span>
+                                {room?.scores?.[p.id] || 0}
+                              </span>
                             </div>
                             {p.id === user.id && <span style={s.youBadgeSmall}>YOU</span>}
                           </div>
@@ -666,42 +701,152 @@ export default function FootballImpostor({ token, user, onBack, channelId }) {
               )}
 
               {gameState === 'voting' && (
-                <div style={s.cluesLayout}>
-                  <div style={s.cluesMain}>
-                    <div style={s.voteHeaderBox}>
-                      <div style={s.voteHeaderTitle}>VOTING PHASE</div>
-                      <div style={timeLeft <= 10 ? s.voteTimerUrgent : s.voteTimer}>{timeLeft}s</div>
-                    </div>
-                    <div style={s.panelDetective}>
-                      <div style={s.panelHeader}>REVIEW CLUES</div>
-                      <div style={s.clueHistory}>
+                <div className="responsive-voting-container impostor-scroll" style={s.votingContainer}>
+                  <div className="responsive-voting-top" style={s.votingTopSection}>
+                    
+                    {/* LEFT PANEL: EVIDENCE BOARD */}
+                    <div className="responsive-voting-side impostor-scroll" style={s.evidenceBoard}>
+                      <div style={s.panelHeader}>EVIDENCE BOARD</div>
+                      <div style={{fontSize: 10, opacity: 0.5, marginBottom: 15}}>Review all submitted clues</div>
+                      
+                      <div className="impostor-scroll" style={{...s.turnLogList, padding: 0}}>
                         {room?.clues?.map((c, i) => (
-                          <div key={i} style={s.clueEntry}>
-                            <span style={s.clueEntryName}>{c.player_name}:</span>
-                            <span style={s.clueEntryWord}>{c.clue}</span>
+                          <div key={i} style={s.chatEntry}>
+                            <div style={s.chatAvatar}>
+                              {getPlayerAvatar(c.player_id) ? (
+                                <img src={getPlayerAvatar(c.player_id)} style={{width: '100%', height: '100%', objectFit: 'cover'}} />
+                              ) : (
+                                <span className="material-symbols-outlined" style={{fontSize: 20, color: 'rgba(255,255,255,0.3)', margin: 6}}>person</span>
+                              )}
+                            </div>
+                            <div style={s.chatContent}>
+                              <div style={s.chatName}>
+                                {c.player_name} 
+                                {c.player_id === user?.id && <span style={s.youBadge}>YOU</span>}
+                                <span style={{marginLeft: 'auto', fontSize: 10, color: 'rgba(255,255,255,0.3)', fontWeight: 600}}>
+                                  1{i}:3{i%10}
+                                </span>
+                              </div>
+                              <div style={s.chatMessage}>{c.clue}</div>
+                            </div>
                           </div>
                         ))}
                       </div>
                     </div>
-                  </div>
 
-                  <div style={s.playersSidePanel}>
-                    <div style={s.panelHeader}>ARREST SUSPECT</div>
-                    {room?.players?.map((p, i) => (
-                      <button
-                        key={i}
-                        disabled={hasVoted || p.id === user.id}
-                        onClick={() => submitVote(p.id)}
-                        style={{
-                          ...s.voteBtn,
-                          borderColor: votedFor === p.id ? '#ef4444' : 'rgba(255,255,255,0.1)',
-                          background: votedFor === p.id ? 'rgba(239,68,68,0.2)' : 'rgba(0,0,0,0.4)',
-                          opacity: (hasVoted && votedFor !== p.id) || p.id === user.id ? 0.3 : 1
-                        }}
-                      >
-                        {p.name}
-                      </button>
-                    ))}
+                    {/* CENTER: TIMER */}
+                    <div className="responsive-voting-center" style={s.votingCenterPanel}>
+                      <div style={s.massiveTimerWrapper}>
+                        <svg width="240" height="240" style={s.massiveTimerSvg}>
+                          <circle cx="120" cy="120" r="110" fill="none" stroke="rgba(255,0,0,0.1)" strokeWidth="15" />
+                          {room?.settings?.voting_time > 0 && (
+                            <circle 
+                              cx="120" cy="120" r="110" fill="none" stroke="#ef4444" strokeWidth="15" 
+                              strokeDasharray="691" 
+                              strokeDashoffset={691 - (691 * (Number(timeLeft) / room?.settings?.voting_time))} 
+                              style={{ transition: 'stroke-dashoffset 1s linear', transform: 'rotate(-90deg)', transformOrigin: '50% 50%', filter: 'drop-shadow(0 0 15px rgba(239,68,68,0.8))' }} 
+                            />
+                          )}
+                        </svg>
+                        <div style={s.massiveTimerContent}>
+                          <div style={s.massiveTimerValue}>{timeLeft}</div>
+                          <div style={s.massiveTimerLabel}>{timeLeft === '∞' ? 'TIME' : 'SECONDS'}</div>
+                        </div>
+                      </div>
+                      
+                      <div style={s.howItWorksBox}>
+                        <div style={s.howItWorksTitle}>HOW IT WORKS</div>
+                        <div style={s.howItWorksRow}>
+                          <span className="material-symbols-outlined" style={s.howItWorksIcon}>forum</span>
+                          <div>
+                            <div style={s.hiwMain}>Discuss</div>
+                            <div style={s.hiwSub}>Share your thoughts</div>
+                          </div>
+                        </div>
+                        <div style={s.howItWorksRow}>
+                          <span className="material-symbols-outlined" style={s.howItWorksIcon}>search</span>
+                          <div>
+                            <div style={s.hiwMain}>Analyze</div>
+                            <div style={s.hiwSub}>Review the clues</div>
+                          </div>
+                        </div>
+                        <div style={s.howItWorksRow}>
+                          <span className="material-symbols-outlined" style={s.howItWorksIcon}>gavel</span>
+                          <div>
+                            <div style={s.hiwMain}>Vote</div>
+                            <div style={s.hiwSub}>Eliminate the impostor</div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* RIGHT PANEL: ARREST SUSPECT */}
+                    <div className="responsive-voting-side impostor-scroll" style={s.arrestBoard}>
+                      <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 15}}>
+                        <div>
+                          <div style={s.panelHeader}>ARREST SUSPECT</div>
+                          <div style={{fontSize: 10, opacity: 0.5}}>Tap a player to cast your vote</div>
+                        </div>
+                        <div style={{display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 5}}>
+                          <div style={{fontSize: 10, fontWeight: 900, color: '#c084fc', letterSpacing: 1}}>VOTES CAST</div>
+                          <div style={{fontSize: 14, fontWeight: 900, color: '#ef4444'}}>
+                            {Object.keys(room?.votes || {}).length} <span style={{color:'rgba(255,255,255,0.4)'}}>/ {room?.players?.length}</span>
+                          </div>
+                          <div style={{display: 'flex', gap: 2, flexWrap: 'wrap', maxWidth: 100, justifyContent: 'flex-end'}}>
+                            {room?.players?.map((p, i) => {
+                              const playerVoted = Object.keys(room?.votes || {}).includes(String(p.id));
+                              return (
+                                <span key={i} className="material-symbols-outlined" style={{
+                                  color: playerVoted ? '#ef4444' : 'rgba(255,255,255,0.1)',
+                                  fontSize: 12
+                                }}>person</span>
+                              )
+                            })}
+                          </div>
+                        </div>
+                      </div>
+                      
+                      <div className="impostor-scroll" style={s.suspectVotingGrid}>
+                        {room?.players?.map((p, i) => {
+                          const votesReceived = Object.values(room?.votes || {}).filter(v => v === p.id).length;
+                          const isSelected = votedFor === p.id;
+                          return (
+                            <button
+                              key={i}
+                              disabled={hasVoted || p.id === user.id}
+                              onClick={() => submitVote(p.id)}
+                              style={{
+                                ...s.votingSuspectCard,
+                                borderColor: isSelected ? '#ef4444' : 'rgba(168,85,247,0.2)',
+                                background: isSelected ? 'rgba(239,68,68,0.1)' : 'rgba(20,22,30,0.8)',
+                                boxShadow: isSelected ? '0 0 20px rgba(239,68,68,0.4), inset 0 0 10px rgba(239,68,68,0.2)' : 'none',
+                                opacity: (hasVoted && !isSelected) || p.id === user.id ? 0.3 : 1,
+                                transform: isSelected ? 'scale(1.02)' : 'scale(1)',
+                              }}
+                            >
+                              <div style={{...s.votingSuspectNumber, background: isSelected ? '#ef4444' : '#a855f7'}}>{i + 1}</div>
+                              <div style={s.votingSuspectPhotoBox}>
+                                {getPlayerAvatar(p.id) ? (
+                                  <img src={getPlayerAvatar(p.id)} style={s.votingSuspectPhoto} />
+                                ) : (
+                                  <span className="material-symbols-outlined" style={{fontSize: 40, opacity: 0.2}}>person</span>
+                                )}
+                              </div>
+                              <div style={s.votingSuspectName}>
+                                {p.name}
+                                <span style={{color: '#fbbf24', marginLeft: 8, fontSize: 12, display: 'flex', alignItems: 'center', gap: 2}}>
+                                  <span className="material-symbols-outlined" style={{fontSize: 14}}>star</span>
+                                  {room?.scores?.[p.id] || 0}
+                                </span>
+                              </div>
+                              <div style={{...s.votingSuspectVotes, color: votesReceived > 0 ? '#ef4444' : 'rgba(255,255,255,0.4)'}}>
+                                VOTES <span className="material-symbols-outlined" style={{fontSize: 10, margin: '0 4px'}}>person</span> {votesReceived}
+                              </div>
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
                   </div>
                 </div>
               )}
@@ -714,7 +859,7 @@ export default function FootballImpostor({ token, user, onBack, channelId }) {
                       <div style={s.guessLabel}>YOU HAVE {timeLeft === '∞' ? 'UNLIMITED TIME' : `${timeLeft}s`} TO STEAL THE WIN</div>
                       <div style={s.guessCategory}>CATEGORY: {room?.category}</div>
                       <input
-                        style={s.clueInputBox}
+                        style={s.guessInputBox}
                         value={guessInput}
                         onChange={e => setGuessInput(e.target.value)}
                         placeholder="GUESS THE SECRET WORD..."
@@ -753,15 +898,63 @@ export default function FootballImpostor({ token, user, onBack, channelId }) {
                         {room?.players?.find(p => p.id === room?.impostor_id)?.name}
                       </div>
                     </div>
+                    {room?.impostor_guess && (
+                      <div style={s.revealRow}>
+                        <div style={s.revealLabel}>IMPOSTOR'S GUESS</div>
+                        <div style={{...s.revealValue, color: '#fca5a5'}}>
+                          {room.impostor_guess}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  {/* LEADERBOARD */}
+                  <div style={{width: '100%', marginBottom: 40}}>
+                    <div style={{fontSize: 16, fontWeight: 900, color: '#e9d5ff', letterSpacing: 4, marginBottom: 15, textAlign: 'center'}}>
+                      CURRENT STANDINGS
+                    </div>
+                    <div style={{display: 'flex', flexDirection: 'column', gap: 10}}>
+                      {room?.players?.map(p => ({...p, score: room?.scores?.[String(p.id)] || 0}))
+                        .sort((a,b) => b.score - a.score)
+                        .map((p, i) => (
+                          <div key={p.id} style={{display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '15px 20px', background: 'rgba(0,0,0,0.4)', borderRadius: 8, border: '1px solid rgba(168,85,247,0.2)'}}>
+                            <div style={{display: 'flex', alignItems: 'center', gap: 15}}>
+                              <div style={{fontSize: 18, fontWeight: 900, color: i === 0 ? '#fbbf24' : 'rgba(255,255,255,0.5)', width: 30}}>
+                                #{i + 1}
+                              </div>
+                              <div style={{display: 'flex', alignItems: 'center', gap: 10}}>
+                                {getPlayerAvatar(p.id) ? (
+                                  <img src={getPlayerAvatar(p.id)} style={{width: 24, height: 24, borderRadius: '50%'}} />
+                                ) : (
+                                  <span className="material-symbols-outlined" style={{fontSize: 24, opacity: 0.5}}>person</span>
+                                )}
+                                <div style={{fontSize: 14, fontWeight: 800, color: '#fff'}}>{p.name}</div>
+                              </div>
+                            </div>
+                            <div style={{fontSize: 18, fontWeight: 900, color: '#fbbf24', display: 'flex', alignItems: 'center', gap: 5}}>
+                              <span className="material-symbols-outlined" style={{fontSize: 20}}>star</span>
+                              {p.score}
+                            </div>
+                          </div>
+                      ))}
+                    </div>
                   </div>
                   
                   <div style={{display: 'flex', gap: 20, width: '100%', maxWidth: 600, flexShrink: 0}}>
-                    {isHost && (
-                      <button onClick={resetGame} style={s.actionBtnNeon}>PLAY AGAIN</button>
+                    {isHost && room?.current_round < (room?.settings?.total_rounds || 5) && (
+                      <button onClick={startNextRound} disabled={isStarting} style={s.actionBtnNeon}>
+                        {isStarting ? 'STARTING...' : 'NEXT ROUND'}
+                      </button>
                     )}
-                    <button onClick={onBack} style={{...s.actionBtnNeon, background: 'rgba(0,0,0,0.5)', borderColor: 'rgba(255,255,255,0.2)', boxShadow: 'none'}}>
-                      RETURN TO MENU
-                    </button>
+                    {isHost && room?.current_round >= (room?.settings?.total_rounds || 5) && (
+                      <button onClick={resetGame} style={s.actionBtnNeon}>
+                        FINISH MATCH
+                      </button>
+                    )}
+                    {isHost && (
+                      <button onClick={resetGame} style={{...s.actionBtnNeon, background: 'rgba(0,0,0,0.5)', borderColor: 'rgba(255,255,255,0.2)', boxShadow: 'none'}}>
+                        RETURN TO LOBBY
+                      </button>
+                    )}
                   </div>
                 </div>
               )}
@@ -800,6 +993,25 @@ export default function FootballImpostor({ token, user, onBack, channelId }) {
             width: 100% !important;
             padding: 15px 20px !important;
             gap: 15px !important;
+          }
+          .responsive-voting-container {
+            padding: 10px 20px 20px !important;
+          }
+          .responsive-voting-top {
+            flex-direction: column !important;
+            height: auto !important;
+            gap: 20px !important;
+          }
+          .responsive-voting-side {
+            min-height: 400px !important;
+            flex: none !important;
+            max-height: 50vh !important;
+          }
+          .responsive-voting-center {
+            order: -1 !important;
+            flex-direction: row !important;
+            flex-wrap: wrap !important;
+            gap: 20px !important;
           }
         }
       `}</style>
@@ -883,20 +1095,20 @@ const s = {
   errorBadge: { marginTop: 15, background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', color: '#fca5a5', padding: '12px', borderRadius: 8, textAlign: 'center', fontWeight: 800, letterSpacing: 1 },
 
   // GAME PHASE STYLES (New Premium AAA Layout)
-  contentWrapperSimple: { flex: 1, display: 'flex', flexDirection: 'column', padding: '20px 40px 40px', maxWidth: 1400, margin: '0 auto', width: '100%', animation: 'slideUp 0.5s cubic-bezier(0.2, 0.8, 0.2, 1)', minHeight: 0 },
+  contentWrapperSimple: { flex: 1, display: 'flex', flexDirection: 'column', padding: '0px 40px 20px', maxWidth: 1400, margin: '0 auto', width: '100%', animation: 'slideUp 0.5s cubic-bezier(0.2, 0.8, 0.2, 1)', minHeight: 0 },
   gameContainer: { width: '100%', display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 },
   
   cluesWrapper: { display: 'flex', flexDirection: 'column', height: '100%', gap: 20, width: '100%', minHeight: 0 },
   cluesLayout: { display: 'flex', gap: 20, flex: 1, minHeight: 0, width: '100%' },
   cluesMain: { flex: 2.2, display: 'flex', flexDirection: 'column', minHeight: 0, background: 'rgba(10,12,18,0.85)', border: '1px solid rgba(168,85,247,0.3)', borderRadius: 12, boxShadow: '0 10px 30px rgba(0,0,0,0.5)' },
-  cluesSide: { flex: 1, minWidth: 260, maxWidth: 350, display: 'flex', flexDirection: 'column', background: 'rgba(10,12,18,0.85)', border: '1px solid rgba(168,85,247,0.2)', borderRadius: 12 },
+  cluesSide: { flex: 1, minWidth: 260, maxWidth: 350, display: 'flex', flexDirection: 'column', background: 'rgba(10,12,18,0.85)', border: '1px solid rgba(168,85,247,0.2)', borderRadius: 12, minHeight: 0 },
   
-  clueBanner: { background: 'linear-gradient(90deg, rgba(20,22,30,0.95) 0%, rgba(30,22,40,0.95) 100%)', border: '1px solid #c084fc', borderRadius: 12, padding: '20px 40px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 40, boxShadow: '0 0 40px rgba(168,85,247,0.2), inset 0 0 20px rgba(168,85,247,0.1)', flexShrink: 0, margin: '0 auto', minWidth: '40%' },
+  clueBanner: { background: 'linear-gradient(90deg, rgba(20,22,30,0.95) 0%, rgba(30,22,40,0.95) 100%)', border: '1px solid #c084fc', borderRadius: 12, padding: '15px 30px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 40, boxShadow: '0 0 40px rgba(168,85,247,0.2), inset 0 0 20px rgba(168,85,247,0.1)', flexShrink: 0, margin: '0 auto', minWidth: '40%' },
   clueBannerContent: { display: 'flex', alignItems: 'center', gap: 20 },
-  clueBannerIcon: { fontSize: 48, color: '#c084fc', filter: 'drop-shadow(0 0 10px rgba(168,85,247,0.8))' },
+  clueBannerIcon: { fontSize: 36, color: '#c084fc', filter: 'drop-shadow(0 0 10px rgba(168,85,247,0.8))' },
   clueBannerLabel: { fontSize: 10, fontWeight: 900, color: '#e9d5ff', letterSpacing: 4, marginBottom: 5 },
-  clueBannerValue: { fontSize: 32, fontWeight: 900, color: '#fff', letterSpacing: 2, textTransform: 'uppercase', textShadow: '0 2px 10px rgba(168,85,247,0.5)' },
-  clueBannerCategory: { fontSize: 14, fontWeight: 700, color: '#a855f7', letterSpacing: 1, marginTop: 5, textTransform: 'uppercase' },
+  clueBannerValue: { fontSize: 24, fontWeight: 900, color: '#fff', letterSpacing: 2, textTransform: 'uppercase', textShadow: '0 2px 10px rgba(168,85,247,0.5)' },
+  clueBannerCategory: { fontSize: 12, fontWeight: 700, color: '#a855f7', letterSpacing: 1, marginTop: 5, textTransform: 'uppercase' },
   
   timerRingWrapper: { position: 'relative', width: 60, height: 60, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   timerText: { position: 'absolute', fontSize: 20, fontWeight: 900, color: '#fff' },
@@ -915,13 +1127,13 @@ const s = {
   chatSendBtn: { background: '#a855f7', border: 'none', borderRadius: 8, width: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#fff', transition: 'all 0.2s' },
   chatWaiting: { padding: '15px', textAlign: 'center', color: 'rgba(255,255,255,0.4)', fontSize: 12, fontWeight: 900, letterSpacing: 2 },
   
-  suspectGrid: { display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8, overflowY: 'auto', padding: '0 20px 20px', alignContent: 'start', flex: 1, minHeight: 0 },
-  suspectItem: { display: 'flex', alignItems: 'center', gap: 8, padding: '10px 8px', background: 'rgba(0,0,0,0.3)', borderRadius: 6, border: '1px solid rgba(255,255,255,0.02)' },
-  suspectItemActive: { display: 'flex', alignItems: 'center', gap: 8, padding: '10px 8px', background: 'rgba(168,85,247,0.1)', borderRadius: 6, border: '1px solid rgba(168,85,247,0.5)', boxShadow: 'inset 0 0 10px rgba(168,85,247,0.2)' },
-  suspectNum: { fontSize: 10, fontWeight: 900, color: 'rgba(255,255,255,0.3)', width: 14 },
-  suspectNumActive: { fontSize: 10, fontWeight: 900, color: '#c084fc', width: 14 },
-  suspectName: { fontSize: 11, fontWeight: 800, color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'flex', alignItems: 'center', gap: 5 },
-  youBadgeSmall: { background: 'rgba(168,85,247,0.3)', color: '#c084fc', fontSize: 8, padding: '1px 3px', borderRadius: 2, marginLeft: 'auto' },
+  suspectGrid: { display: 'flex', flexDirection: 'column', gap: 12, overflowY: 'auto', padding: '0 20px 20px', flex: 1, minHeight: 0 },
+  suspectItem: { display: 'flex', alignItems: 'center', gap: 10, padding: '12px 10px', background: 'rgba(0,0,0,0.3)', borderRadius: 8, border: '1px solid rgba(255,255,255,0.02)' },
+  suspectItemActive: { display: 'flex', alignItems: 'center', gap: 10, padding: '12px 10px', background: 'rgba(168,85,247,0.1)', borderRadius: 8, border: '1px solid rgba(168,85,247,0.5)', boxShadow: 'inset 0 0 10px rgba(168,85,247,0.2)' },
+  suspectNum: { fontSize: 12, fontWeight: 900, color: 'rgba(255,255,255,0.3)', width: 18 },
+  suspectNumActive: { fontSize: 12, fontWeight: 900, color: '#c084fc', width: 18 },
+  suspectName: { fontSize: 13, fontWeight: 800, color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'flex', alignItems: 'center', gap: 5 },
+  youBadgeSmall: { background: 'rgba(168,85,247,0.3)', color: '#c084fc', fontSize: 9, padding: '2px 4px', borderRadius: 2, marginLeft: 'auto' },
   voteHeaderBox: { width: '100%', padding: '30px 40px', background: 'linear-gradient(90deg, rgba(239,68,68,0.1) 0%, rgba(239,68,68,0.02) 100%)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 40 },
   voteHeaderTitle: { fontSize: 24, fontWeight: 900, color: '#fca5a5', letterSpacing: 6 },
   voteTimer: { fontSize: 42, fontWeight: 900, color: '#fff' },
@@ -936,8 +1148,58 @@ const s = {
   resultBannerCrew: { fontSize: 48, fontWeight: 900, color: '#22c55e', letterSpacing: 6, textShadow: '0 0 40px rgba(34,197,94,0.6)', textAlign: 'center', marginBottom: 15, flexShrink: 0 },
   resultReason: { fontSize: 14, fontWeight: 800, color: 'rgba(255,255,255,0.6)', letterSpacing: 2, marginBottom: 30, textAlign: 'center', maxWidth: 600, lineHeight: 1.6, flexShrink: 0 },
   revealPanel: { width: '100%', background: 'rgba(0,0,0,0.6)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: 16, padding: 40, display: 'flex', flexDirection: 'column', gap: 30, marginBottom: 30, flexShrink: 0 },
+  
+  guessInputBox: { width: '100%', background: 'rgba(0,0,0,0.5)', border: '2px solid rgba(168,85,247,0.5)', borderRadius: 8, padding: '20px 25px', color: '#fff', fontSize: 20, fontWeight: 700, outline: 'none', textAlign: 'center', letterSpacing: 2, transition: 'all 0.2s', boxShadow: 'inset 0 0 15px rgba(0,0,0,0.8)' },
   revealRow: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 },
   revealLabel: { fontSize: 11, fontWeight: 900, color: 'rgba(255,255,255,0.4)', letterSpacing: 6 },
   revealValue: { fontSize: 36, fontWeight: 900, letterSpacing: 4, textTransform: 'uppercase' },
   revealValueImpostor: { fontSize: 36, fontWeight: 900, color: '#ef4444', letterSpacing: 4, textTransform: 'uppercase', textShadow: '0 0 20px rgba(239,68,68,0.4)' },
+
+  // Voting Phase UI Styles
+  votingContainer: { display: 'flex', flexDirection: 'column', gap: 20, flex: 1, minHeight: 0, padding: '10px 40px 20px', maxWidth: 1400, margin: '0 auto', width: '100%', overflowY: 'auto' },
+  votingTopSection: { display: 'flex', gap: 30, flex: 1, minHeight: 0 },
+  
+  evidenceBoard: { flex: 1.2, background: 'rgba(20,22,30,0.85)', border: '1px solid rgba(168,85,247,0.3)', borderRadius: 12, padding: '20px', display: 'flex', flexDirection: 'column', boxShadow: 'inset 0 0 60px rgba(0,0,0,0.8), 0 20px 40px rgba(0,0,0,0.6)', minHeight: 0 },
+  evidenceList: { display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 15, overflowY: 'auto', paddingRight: 10, paddingBottom: 10 },
+  evidenceCard: { position: 'relative', background: '#b49b79', borderRadius: 2, padding: '15px', display: 'flex', alignItems: 'center', gap: 15, boxShadow: '2px 4px 15px rgba(0,0,0,0.5)', backgroundImage: 'url("data:image/svg+xml,%3Csvg viewBox=%220 0 200 200%22 xmlns=%22http://www.w3.org/2000/svg%22%3E%3Cfilter id=%22noise%22%3E%3CfeTurbulence type=%22fractalNoise%22 baseFrequency=%220.8%22 numOctaves=%223%22 stitchTiles=%22stitch%22/%3E%3C/filter%3E%3Crect width=%22100%25%22 height=%22100%25%22 filter=%22url(%23noise)%22 opacity=%220.08%22/%3E%3C/svg%3E"), linear-gradient(135deg, rgba(0,0,0,0.05) 0%, rgba(0,0,0,0) 100%)', border: '1px solid #8c7255', minWidth: 0 },
+  evidenceTape: { position: 'absolute', top: -8, left: -10, width: 40, height: 16, background: 'rgba(255,255,255,0.4)', transform: 'rotate(-15deg)', backdropFilter: 'blur(2px)', boxShadow: '0 1px 3px rgba(0,0,0,0.2)' },
+  evidencePin: { position: 'absolute', top: 5, right: 15, width: 12, height: 12, background: 'radial-gradient(circle at 30% 30%, #ef4444, #991b1b)', borderRadius: '50%', boxShadow: '2px 4px 6px rgba(0,0,0,0.5)' },
+  evidencePhotoBox: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, background: '#111', padding: 4, border: '1px solid rgba(0,0,0,0.5)', flexShrink: 0 },
+  evidencePhoto: { width: 50, height: 60, objectFit: 'cover', filter: 'grayscale(1) contrast(1.5)' },
+  evidenceDetails: { flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', position: 'relative', zIndex: 2, minWidth: 0 },
+  evidenceNameLabel: { background: '#a855f7', color: '#fff', fontSize: 9, fontWeight: 900, padding: '2px 6px', textTransform: 'uppercase', letterSpacing: 1 },
+  evidenceClueText: { fontFamily: "'Caveat', cursive", fontSize: 18, fontWeight: 700, color: '#111', transform: 'rotate(-2deg)', marginTop: 5, whiteSpace: 'normal', wordBreak: 'break-word', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden', width: '100%' },
+  evidenceDay: { position: 'absolute', bottom: -5, right: 0, fontSize: 10, color: 'rgba(0,0,0,0.4)', fontFamily: 'monospace' },
+  evidenceFingerprint: { position: 'absolute', right: 20, bottom: 5, width: 40, height: 60, background: 'url("data:image/svg+xml,%3Csvg viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%23000%22 stroke-width=%221%22 xmlns=%22http://www.w3.org/2000/svg%22%3E%3Cpath d=%22M12 2C6.48 2 2 6.48 2 12C2 17.52 6.48 22 12 22C17.52 22 22 17.52 22 12C22 6.48 17.52 2 12 2ZM12 20C7.59 20 4 16.41 4 12C4 7.59 7.59 4 12 4C16.41 4 20 7.59 20 12C20 16.41 16.41 20 12 20Z%22/%3E%3C/svg%3E") no-repeat center', backgroundSize: 'contain', opacity: 0.1, zIndex: 1, transform: 'rotate(15deg)' },
+
+  votingCenterPanel: { flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 30 },
+  massiveTimerWrapper: { position: 'relative', width: 240, height: 240, display: 'flex', alignItems: 'center', justifyContent: 'center' },
+  massiveTimerSvg: { position: 'absolute', inset: 0 },
+  massiveTimerContent: { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', zIndex: 2 },
+  massiveTimerValue: { fontSize: 72, fontWeight: 900, color: '#fff', textShadow: '0 0 20px rgba(239,68,68,0.8)', lineHeight: 1 },
+  massiveTimerLabel: { fontSize: 14, fontWeight: 800, color: 'rgba(255,255,255,0.6)', letterSpacing: 3, marginTop: 5 },
+  
+  howItWorksBox: { background: 'rgba(168,85,247,0.05)', border: '1px solid rgba(168,85,247,0.2)', borderRadius: 12, padding: '20px', width: '100%', maxWidth: 260 },
+  howItWorksTitle: { fontSize: 10, fontWeight: 900, color: '#c084fc', letterSpacing: 2, marginBottom: 15, textAlign: 'center' },
+  howItWorksRow: { display: 'flex', alignItems: 'center', gap: 15, marginBottom: 15 },
+  howItWorksIcon: { fontSize: 24, color: '#c084fc', opacity: 0.8 },
+  hiwMain: { fontSize: 14, fontWeight: 800, color: '#fff' },
+  hiwSub: { fontSize: 10, color: 'rgba(255,255,255,0.4)' },
+
+  arrestBoard: { flex: 1.5, background: 'rgba(20,22,30,0.85)', border: '1px solid rgba(168,85,247,0.3)', borderRadius: 12, padding: '20px', display: 'flex', flexDirection: 'column', boxShadow: 'inset 0 0 60px rgba(0,0,0,0.8), 0 20px 40px rgba(0,0,0,0.6)', minHeight: 0 },
+  suspectVotingGrid: { display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10, overflowY: 'auto', paddingRight: 10, alignContent: 'start', paddingBottom: 10 },
+  votingSuspectCard: { position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, padding: '15px 10px', borderRadius: 8, border: '1px solid rgba(168,85,247,0.2)', background: 'rgba(20,22,30,0.8)', cursor: 'pointer', transition: 'all 0.2s', overflow: 'hidden' },
+  votingSuspectNumber: { position: 'absolute', top: 0, left: 0, fontSize: 10, fontWeight: 900, color: '#fff', background: '#a855f7', padding: '2px 6px', borderBottomRightRadius: 4 },
+  votingSuspectPhotoBox: { width: 40, height: 50, border: '1px solid rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#111' },
+  votingSuspectPhoto: { width: '100%', height: '100%', objectFit: 'cover', filter: 'grayscale(0.5)' },
+  votingSuspectName: { fontSize: 11, fontWeight: 800, color: '#fff', textTransform: 'uppercase', letterSpacing: 1, textAlign: 'center', width: '100%', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' },
+  votingSuspectVotes: { fontSize: 9, fontWeight: 900, color: 'rgba(255,255,255,0.4)', display: 'flex', alignItems: 'center', gap: 4 },
+
+  votesTrackerPanel: { background: 'rgba(20,22,30,0.9)', border: '1px solid rgba(168,85,247,0.3)', borderRadius: 12, padding: '15px 25px', display: 'flex', alignItems: 'center', boxShadow: '0 10px 30px rgba(0,0,0,0.5)', flexShrink: 0 },
+  votesTrackerContent: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' },
+  votesTrackerLeft: { display: 'flex', flexDirection: 'column', gap: 8 },
+  votesTrackerTitle: { fontSize: 12, fontWeight: 900, color: '#fff', letterSpacing: 2 },
+  votesTrackerIcons: { display: 'flex', gap: 4 },
+  votesTrackerStatus: { fontSize: 10, color: 'rgba(255,255,255,0.4)', marginTop: 4 },
+  votesTrackerRight: { background: 'rgba(0,0,0,0.5)', padding: '10px 20px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.05)', display: 'flex', alignItems: 'baseline', gap: 5 }
 }

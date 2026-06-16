@@ -1,7 +1,7 @@
 # FUTBOT Social - Progress Tracker
 
 ## Overview
-FUTBOT Social is a football party-game platform for Discord Activities with three games: Guess The Player, Higher or Lower, and Football Survivor.
+FUTBOT Social is a football party-game platform for Discord Activities with four games: Guess The Player, Higher or Lower, Football Survivor, and Football Impostor.
 
 ---
 
@@ -116,6 +116,14 @@ SUPABASE_SERVICE_KEY=your-service-role-key
 - `POST /api/social/games/survivor/vote` - Submit secret vote
 - `POST /api/social/games/survivor/reveal` - Reveal results, eliminate minority
 
+### Football Impostor
+- `POST /api/social/games/impostor/room/{room_id}` - Get room state
+- `POST /api/social/games/impostor/start2` - Start game and assign Impostor
+- `POST /api/social/games/impostor/clue2` - Submit a clue word
+- `POST /api/social/games/impostor/vote2` - Vote out a suspect
+- `POST /api/social/games/impostor/guess2` - Impostor guesses the secret word
+- `POST /api/social/games/impostor/next_round` - Advance to next round
+
 ---
 
 ## Frontend Games
@@ -151,6 +159,16 @@ SUPABASE_SERVICE_KEY=your-service-role-key
 - **Majority survives, minority eliminated** (tie = everyone survives)
 - **Auto-elimination**: No votes = random elimination
 - **Final standings** with winner crowned
+
+### Football Impostor (`frontend/src/pages/social/FootballImpostor.jsx`)
+- **Secret Word Mechanics**: Everyone gets a secret word except the Impostor.
+- **Multi-Round Match System**: Host can set 5, 10, or 15 total rounds.
+- **Phases**:
+  1. **Clues Phase**: Each player submits a one-word clue.
+  2. **Voting Phase**: Evidence board displays all clues. Players debate and vote out a suspect.
+  3. **Guess Phase**: If caught, the Impostor has one chance to guess the secret word.
+- **Scoring**: Impostor earns +3 points for escaping or correctly guessing. Crew members earn +1 for catching the Impostor.
+- **Leaderboard**: Displays current standings across multiple rounds.
 
 ---
 
@@ -197,6 +215,7 @@ SUPABASE_SERVICE_KEY=your-service-role-key
 - `frontend/src/pages/social/GuessThePlayer.jsx` - Guess game
 - `frontend/src/pages/social/HigherOrLower.jsx` - Higher/Lower game
 - `frontend/src/pages/social/FootballSurvivor.jsx` - Survivor game
+- `frontend/src/pages/social/FootballImpostor.jsx` - Impostor game
 - `frontend/src/pages/social/SocialHome.jsx` - Social hub
 - `frontend/src/App.jsx` - Updated routing
 - `frontend/src/lib/api.js` - Added error logging
@@ -207,6 +226,6 @@ SUPABASE_SERVICE_KEY=your-service-role-key
 
 ---
 
-*Last updated: 2026-06-14*
-*Games implemented: 3/3 (100%)*
+*Last updated: 2026-06-16*
+*Games implemented: 4/4 (100%)*
 *Testing status: Ready for testing*
