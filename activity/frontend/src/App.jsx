@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { discordSdk } from './lib/discord'
 import { apiFetch } from './lib/api'
 import Nav from './components/Nav'
-import ModeSelector from './components/ModeSelector'
+import Landing from './pages/Landing'
 import Home from './pages/Home'
 import Collection from './pages/Collection'
 import DeckBuilder from './pages/DeckBuilder'
@@ -112,7 +112,7 @@ function App() {
 
   // Show mode selector if no mode selected yet
   if (!mode) {
-    return <ModeSelector onSelectMode={setMode} />
+    return <Landing onSelectMode={setMode} user={user} />
   }
 
   // SOCIAL MODE
