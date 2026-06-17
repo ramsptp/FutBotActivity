@@ -296,3 +296,50 @@ export function buttonClick() {
   src.connect(filt); filt.connect(gain); gain.connect(master(0.5))
   src.start(now)
 }
+
+// ────────────────────────────────────────────────────────────────
+// TIMER TICK — subtle heartbeat/clock tick
+// ────────────────────────────────────────────────────────────────
+export function timerTick() {
+  const c = ctx(); const now = c.currentTime
+  const osc = c.createOscillator(); osc.type = 'triangle'
+  osc.frequency.setValueAtTime(800, now)
+  osc.frequency.exponentialRampToValueAtTime(100, now + 0.05)
+  const gain = c.createGain()
+  gain.gain.setValueAtTime(0.3, now)
+  gain.gain.exponentialRampToValueAtTime(0.001, now + 0.1)
+  osc.connect(gain); gain.connect(master(0.6))
+  osc.start(now); osc.stop(now + 0.15)
+}
+
+// ────────────────────────────────────────────────────────────────
+// TOAST POP — soft bubble
+// ────────────────────────────────────────────────────────────────
+export function toastPop() {
+  const c = ctx(); const now = c.currentTime
+  const osc = c.createOscillator(); osc.type = 'sine'
+  osc.frequency.setValueAtTime(400, now)
+  osc.frequency.exponentialRampToValueAtTime(800, now + 0.08)
+  const gain = c.createGain()
+  gain.gain.setValueAtTime(0.2, now)
+  gain.gain.exponentialRampToValueAtTime(0.001, now + 0.15)
+  osc.connect(gain); gain.connect(master(0.7))
+  osc.start(now); osc.stop(now + 0.2)
+}
+
+// ────────────────────────────────────────────────────────────────
+// ERROR BUZZ — deep thud for wrong guesses/eliminations
+// ────────────────────────────────────────────────────────────────
+export function errorBuzz() {
+  const c = ctx(); const now = c.currentTime
+  const osc = c.createOscillator(); osc.type = 'sawtooth'
+  osc.frequency.setValueAtTime(100, now)
+  osc.frequency.exponentialRampToValueAtTime(50, now + 0.2)
+  const filt = c.createBiquadFilter(); filt.type = 'lowpass'
+  filt.frequency.setValueAtTime(500, now); filt.frequency.exponentialRampToValueAtTime(100, now + 0.2)
+  const gain = c.createGain()
+  gain.gain.setValueAtTime(0.3, now)
+  gain.gain.exponentialRampToValueAtTime(0.001, now + 0.25)
+  osc.connect(filt); filt.connect(gain); gain.connect(master(0.8))
+  osc.start(now); osc.stop(now + 0.3)
+}

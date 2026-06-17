@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { apiFetch } from '../../lib/api'
+import * as sfx from '../../lib/sounds'
 
 export default function FootballImpostor({ token, user, onBack, channelId }) {
   const [gameState, setGameState] = useState('loading') 
@@ -23,6 +24,18 @@ export default function FootballImpostor({ token, user, onBack, channelId }) {
 
   const pollRef = useRef(null)
   const timerRef = useRef(null)
+  const prevGameState = useRef('loading')
+  const prevRoundRef = useRef(0)
+  
+  const [showRoundIntro, setShowRoundIntro] = useState(false)
+  const [isShaking, setIsShaking] = useState(false)
+  
+  const triggerShake = useCallback(() => {
+    setIsShaking(true)
+    setTimeout(() => setIsShaking(false), 400)
+    sfx.errorBuzz()
+  }, [])
+
 
   const autoJoin = useCallback(async () => {
     try {
@@ -136,6 +149,54 @@ export default function FootballImpostor({ token, user, onBack, channelId }) {
     }
   }, [room?.status, room?.clue_end_time, room?.vote_end_time, room?.guess_end_time, room?.settings?.clue_time, room?.settings?.voting_time])
 
+  // Timer Tick Sound
+  useEffect(() => {
+    if (typeof timeLeft === 'number' && timeLeft <= 5 && timeLeft > 0) {
+      sfx.timerTick()
+    }
+  }, [timeLeft])
+
+  // Game State Change Sounds & Animations
+  useEffect(() => {
+    if (!room) return
+    
+    // Round Intro Animation
+    if (gameState === 'clues' && room.current_round && room.current_round !== prevRoundRef.current) {
+      prevRoundRef.current = room.current_round
+      setShowRoundIntro(true)
+      sfx.dramaticReveal('Rare')
+      const t = setTimeout(() => setShowRoundIntro(false), 2500)
+      return () => clearTimeout(t)
+    }
+
+    // Results Sounds & Confetti
+    if (gameState === 'results' && prevGameState.current !== 'results') {
+      const isImpostor = room.impostor_id === user.id
+      if (room.winner === 'impostor') {
+        if (isImpostor) sfx.roundWin()
+        else { sfx.roundLose(); triggerShake() }
+      } else if (room.winner === 'crew') {
+        if (isImpostor) { sfx.errorBuzz(); triggerShake() }
+        else sfx.roundWin()
+      }
+      
+      // Match Finish Confetti
+      if (room.current_round >= (room.settings?.total_rounds || 5)) {
+        import('canvas-confetti').then((confetti) => {
+          setTimeout(() => {
+            confetti.default({
+              particleCount: 150, spread: 80, origin: { y: 0.6 }, zIndex: 1000,
+              colors: ['#a855f7', '#c084fc', '#e9d5ff', '#ef4444', '#fbbf24']
+            })
+            sfx.matchWin()
+          }, 500)
+        })
+      }
+    }
+    
+    prevGameState.current = gameState
+  }, [gameState, room, user.id, triggerShake])
+
   const updateSettings = async (updates) => {
     const newSettings = { clue_time: clueTime, voting_time: votingTime, total_rounds: totalRounds, show_category: room?.settings?.show_category ?? true, ...updates }
     try {
@@ -217,6 +278,7 @@ export default function FootballImpostor({ token, user, onBack, channelId }) {
         })
       })
       setClueInput('')
+      sfx.buttonClick()
     } catch (err) {}
   }
 
@@ -233,6 +295,7 @@ export default function FootballImpostor({ token, user, onBack, channelId }) {
       })
       setVotedFor(targetId)
       setHasVoted(true)
+      sfx.buttonClick()
     } catch (err) {}
   }
 
@@ -248,6 +311,7 @@ export default function FootballImpostor({ token, user, onBack, channelId }) {
         })
       })
       setGuessInput('')
+      sfx.buttonClick()
     } catch (err) {}
   }
 
@@ -285,12 +349,41 @@ export default function FootballImpostor({ token, user, onBack, channelId }) {
   }
 
   return (
-    <div style={s.container}>
+    <div style={{...s.container, animation: isShaking ? 'shake 0.4s cubic-bezier(.36,.07,.19,.97) both' : 'none'}} className="impostor-scroll">
       <style>
         {`@import url('https://fonts.googleapis.com/css2?family=Caveat:wght@700&display=swap');
           @media (max-width: 1400px) { .impostor-scale-wrapper { zoom: 0.85; } }
           @media (max-width: 1200px) { .impostor-scale-wrapper { zoom: 0.75; } }
           @media (max-width: 1000px) { .impostor-scale-wrapper { zoom: 0.65; } }
+          
+          @keyframes shake {
+            10%, 90% { transform: translate3d(-1px, 0, 0); }
+            20%, 80% { transform: translate3d(2px, 0, 0); }
+            30%, 50%, 70% { transform: translate3d(-4px, 0, 0); }
+            40%, 60% { transform: translate3d(4px, 0, 0); }
+          }
+          
+          @keyframes roundIntroText {
+            0% { transform: scale(0.5); opacity: 0; filter: blur(10px); }
+            20% { transform: scale(1.1); opacity: 1; filter: blur(0px); }
+            80% { transform: scale(1); opacity: 1; filter: blur(0px); }
+            100% { transform: scale(1.5); opacity: 0; filter: blur(10px); }
+          }
+          
+          @keyframes staggerFade {
+            from { opacity: 0; transform: translateX(-20px); }
+            to { opacity: 1; transform: translateX(0); }
+          }
+          
+          .stagger-item { animation: staggerFade 0.4s ease forwards; opacity: 0; }
+          .glow-text { animation: pulseGlow 2s infinite; }
+          
+          @keyframes pulseGlow {
+            0% { text-shadow: 0 0 10px rgba(239,68,68,0.5); }
+            50% { text-shadow: 0 0 30px rgba(239,68,68,1), 0 0 10px rgba(255,255,255,0.5); }
+            100% { text-shadow: 0 0 10px rgba(239,68,68,0.5); }
+          }
+
           @media (max-width: 800px) { .impostor-scale-wrapper { zoom: 0.55; } }
           @media (max-width: 600px) { .impostor-scale-wrapper { zoom: 0.45; } }
         `}
@@ -300,6 +393,15 @@ export default function FootballImpostor({ token, user, onBack, channelId }) {
       <div style={s.noise} />
 
       <div className="impostor-scale-wrapper" style={{position: 'relative', zIndex: 10, flex: 1, display: 'flex', flexDirection: 'column', transformOrigin: 'top center'}}>
+        {/* ROUND INTRO OVERLAY */}
+        {showRoundIntro && (
+          <div style={{position: 'absolute', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(5px)'}}>
+            <div style={{fontSize: 80, fontWeight: 900, color: '#fff', letterSpacing: 10, textShadow: '0 0 40px #a855f7, 0 0 20px #c084fc', animation: 'roundIntroText 2.5s cubic-bezier(0.2, 0.8, 0.2, 1) forwards', textAlign: 'center'}}>
+              ROUND {room?.current_round}
+            </div>
+          </div>
+        )}
+
         {/* HEADER */}
         <div style={s.header}>
           <button onClick={onBack} style={s.backBtn}>
@@ -676,7 +778,7 @@ export default function FootballImpostor({ token, user, onBack, channelId }) {
                       </div>
                       <div className="impostor-scroll" style={s.suspectGrid}>
                         {room?.players?.map((p, i) => (
-                          <div key={i} style={room?.turn_index === i ? s.suspectItemActive : s.suspectItem}>
+                          <div key={i} className="stagger-item" style={{...(room?.turn_index === i ? s.suspectItemActive : s.suspectItem), animationDelay: `${i * 0.1}s`}}>
                             <div style={room?.turn_index === i ? s.suspectNumActive : s.suspectNum}>{i + 1}</div>
                             {getPlayerAvatar(p.id) ? (
                               <img src={getPlayerAvatar(p.id)} style={{width: 24, height: 24, borderRadius: '50%'}} />
@@ -881,7 +983,7 @@ export default function FootballImpostor({ token, user, onBack, channelId }) {
 
               {gameState === 'results' && (
                 <div className="impostor-scroll" style={s.centerScreen}>
-                  <div style={room?.winner === 'impostor' ? s.resultBannerImpostor : s.resultBannerCrew}>
+                  <div className={room?.winner === 'impostor' ? 'glow-text' : ''} style={room?.winner === 'impostor' ? s.resultBannerImpostor : s.resultBannerCrew}>
                     {room?.winner === 'impostor' ? 'IMPOSTOR ESCAPED' : 'CASE CLOSED: CREW WINS'}
                   </div>
                   
@@ -916,7 +1018,7 @@ export default function FootballImpostor({ token, user, onBack, channelId }) {
                       {room?.players?.map(p => ({...p, score: room?.scores?.[String(p.id)] || 0}))
                         .sort((a,b) => b.score - a.score)
                         .map((p, i) => (
-                          <div key={p.id} style={{display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '15px 20px', background: 'rgba(0,0,0,0.4)', borderRadius: 8, border: '1px solid rgba(168,85,247,0.2)'}}>
+                          <div key={p.id} className="stagger-item" style={{display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '15px 20px', background: 'rgba(0,0,0,0.4)', borderRadius: 8, border: '1px solid rgba(168,85,247,0.2)', animationDelay: `${i * 0.15}s`}}>
                             <div style={{display: 'flex', alignItems: 'center', gap: 15}}>
                               <div style={{fontSize: 18, fontWeight: 900, color: i === 0 ? '#fbbf24' : 'rgba(255,255,255,0.5)', width: 30}}>
                                 #{i + 1}
